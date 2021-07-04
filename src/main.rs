@@ -51,7 +51,7 @@ impl Type {
     }
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 struct Sequent {
     antecedent: Vec<Rc<Type>>,
     consequent: Rc<Type>,
@@ -89,6 +89,7 @@ impl Sequent {
     }
 }
 
+/*
 #[derive(Debug, Hash)]
 struct Inference {
     premises: Vec<Rc<Sequent>>,
@@ -96,85 +97,6 @@ struct Inference {
 }
 
 impl Inference {
-    /// ```
-    /// ----------
-    /// A , Г => A
-    /// ```
-    pub fn axiom(s: Rc<Sequent>) -> Option<Self> {
-        match s.consequent.as_ref() {
-            Type::Var { .. } if s.has_assumption(s.consequent.as_ref()) => Some(Inference {
-                premises: Vec::new(),
-                conclusion: s,
-            }),
-            _ => None,
-        }
-    }
-
-    /// ```
-    /// ----------
-    /// ⊥ , Г => G
-    /// ```
-    pub fn ex_falso(s: Rc<Sequent>) -> Option<Self> {
-        if s.false_assumption() {
-            Some(Inference {
-                premises: Vec::new(),
-                conclusion: s,
-            })
-        } else {
-            None
-        }
-    }
-
-    /// ```
-    /// A, B, Г => G
-    /// -------------
-    /// A ∧ B, Г => G
-    /// ```
-    pub fn and_l(s: Rc<Sequent>) -> Option<Self> {
-        if let Some((left, right)) = s.antecedent.iter().find_map(|ty| match ty.as_ref() {
-            Type::And { left, right } => Some((left, right)),
-            _ => None,
-        }) {
-            let mut antecedent = Vec::with_capacity(2);
-            antecedent.push(left.clone());
-            antecedent.push(right.clone());
-            let consequent = s.consequent.clone();
-            Some(Inference {
-                premises: vec![Rc::new(Sequent {
-                    antecedent,
-                    consequent,
-                })],
-                conclusion: s,
-            })
-        } else {
-            None
-        }
-    }
-
-    /// ```
-    /// Г => A  Г => B
-    /// --------------
-    ///   Г => A ∧ B
-    /// ```
-    pub fn and_r(s: Rc<Sequent>) -> Option<Self> {
-        match s.consequent.as_ref() {
-            Type::And { left, right } => Some(Inference {
-                premises: vec![
-                    Rc::new(Sequent {
-                        antecedent: s.antecedent.clone(),
-                        consequent: left.clone(),
-                    }),
-                    Rc::new(Sequent {
-                        antecedent: s.antecedent.clone(),
-                        consequent: right.clone(),
-                    }),
-                ],
-                conclusion: s,
-            }),
-
-            _ => None,
-        }
-    }
 
     /// ```
     /// Г => A
@@ -236,35 +158,153 @@ impl Inference {
             _ => None,
         }
     }
+}
 
-    /// ```
-    /// A, Г => B
-    /// -----------
-    /// Г => A -> B
-    /// ```
-    pub fn imp_r(s: Rc<Sequent>) -> Option<Self> {
-        match s.consequent.as_ref() {
-            Type::Imp { left, right } => {
-                let mut antecedent = s.antecedent.clone();
-                antecedent.push(left.clone());
-                Some(Inference {
-                    premises: vec![Rc::new(Sequent {
-                        antecedent,
+*/
+
+#[derive(Debug)]
+enum Rule {
+    Axiom,
+    ExFalso,
+    ImpR,
+    AndL,
+    AndR,
+}
+
+#[derive(Debug)]
+struct Subgoal {
+    rule: Rule,
+    goals: Vec<Rc<Sequent>>,
+}
+
+// These are steps that are always worth taking, and don't require back-tracking.
+fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
+
+    match goal.consequent.as_ref() {
+        // ```
+        // ----------
+        // A , Г => A
+        // ```
+        _ if goal.has_assumption(goal.consequent.as_ref()) =>
+            return Some(Subgoal {
+            rule: Rule::Axiom,
+            goals: Vec::new(),
+        }),
+
+        // ```
+        // A, Г => B
+        // -----------
+        // Г => A -> B
+        // ```
+        Type::Imp { left, right } => {
+            let mut antecedent = goal.antecedent.clone();
+            antecedent.push(left.clone());
+            return Some(Subgoal {
+                rule: Rule::ImpR,
+                goals: vec![Rc::new(Sequent {
+                    antecedent,
+                    consequent: right.clone(),
+                })],
+            })
+        }
+
+        // ```
+        // Г => A  Г => B
+        // --------------
+        //   Г => A ∧ B
+        // ```
+        Type::And { left, right } =>
+            return Some(Subgoal {
+                rule: Rule::AndR,
+                goals: vec![
+                    Rc::new(Sequent {
+                        antecedent: goal.antecedent.clone(),
+                        consequent: left.clone(),
+                    }),
+                    Rc::new(Sequent {
+                        antecedent: goal.antecedent.clone(),
                         consequent: right.clone(),
-                    })],
-                    conclusion: s,
+                    }),
+                ],
+            }),
+
+        _ => (),
+    }
+
+    for assump in goal.antecedent.iter() {
+        match assump.as_ref() {
+            // ```
+            // ----------
+            // ⊥ , Г => G
+            // ```
+            Type::Bottom =>
+            return Some(Subgoal {
+                rule: Rule::ExFalso,
+                goals: Vec::new(),
+            }),
+
+            // ```
+            // A, B, Г => G
+            // -------------
+            // A ∧ B, Г => G
+            // ```
+            //
+            // TODO: is it necessary to consume the `A ∧ B` fact?
+            Type::And { left, right } => {
+                let mut antecedent = Vec::with_capacity(goal.antecedent.len() + 1);
+                antecedent.push(left.clone());
+                antecedent.push(right.clone());
+                antecedent.extend_from_slice(&goal.antecedent[1..]);
+                return Some(Subgoal {
+                    rule: Rule::AndL,
+                    goals: vec![Rc::new(Sequent{ antecedent, consequent: goal.consequent.clone() })],
                 })
             }
 
-            _ => None,
+            _ => (),
         }
     }
+
+    None
+}
+
+#[derive(Debug)]
+struct Proof {
+    rule: Rule,
+    premises: Vec<Proof>,
+    conclusion: Rc<Sequent>,
+}
+
+fn prove(goal: Rc<Sequent>) -> Option<Proof> {
+    if let Some(subgoal) = try_simple(goal.clone()) {
+        let mut premises = Vec::with_capacity(subgoal.goals.len());
+        for goal in subgoal.goals {
+            if let Some(proof) = prove(goal) {
+                premises.push(proof);
+            } else {
+                return None;
+            }
+        }
+        return Some(Proof{
+            rule: subgoal.rule,
+            premises,
+            conclusion: goal,
+        })
+    }
+
+    // try remaining strategies in sequence
+
+    None
 }
 
 fn main() {
-    let var = Rc::new(Type::var("a"));
-    let ty = Rc::new(Type::imp(var.clone(), var));
-    let seq = Rc::new(Sequent::from_type(ty));
-    let inf = Inference::imp_r(seq);
-    println!("{:?}", inf);
+    let var_a = Rc::new(Type::var("a"));
+    let var_b = Rc::new(Type::var("b"));
+    let and = Rc::new(Type::and(var_a.clone(), var_b));
+    let goal = Rc::new(Sequent::from_type(Rc::new(Type::imp(and, var_a))));
+
+
+    if let Some(proof) = prove(goal) {
+        println!("{:?}", proof);
+    }
 }
