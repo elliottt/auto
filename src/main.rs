@@ -169,6 +169,8 @@ enum Rule {
     ImpR,
     AndL,
     AndR,
+    OrInjL,
+    OrInjR,
 }
 
 #[derive(Debug)]
@@ -179,17 +181,17 @@ struct Subgoal {
 
 // These are steps that are always worth taking, and don't require back-tracking.
 fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
-
     match goal.consequent.as_ref() {
         // ```
         // ----------
         // A , Г => A
         // ```
-        _ if goal.has_assumption(goal.consequent.as_ref()) =>
+        _ if goal.has_assumption(goal.consequent.as_ref()) => {
             return Some(Subgoal {
-            rule: Rule::Axiom,
-            goals: Vec::new(),
-        }),
+                rule: Rule::Axiom,
+                goals: Vec::new(),
+            })
+        }
 
         // ```
         // A, Г => B
@@ -205,7 +207,7 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                     antecedent,
                     consequent: right.clone(),
                 })],
-            })
+            });
         }
 
         // ```
@@ -213,7 +215,7 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
         // --------------
         //   Г => A ∧ B
         // ```
-        Type::And { left, right } =>
+        Type::And { left, right } => {
             return Some(Subgoal {
                 rule: Rule::AndR,
                 goals: vec![
@@ -226,7 +228,8 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                         consequent: right.clone(),
                     }),
                 ],
-            }),
+            })
+        }
 
         _ => (),
     }
@@ -237,11 +240,12 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
             // ----------
             // ⊥ , Г => G
             // ```
-            Type::Bottom =>
-            return Some(Subgoal {
-                rule: Rule::ExFalso,
-                goals: Vec::new(),
-            }),
+            Type::Bottom => {
+                return Some(Subgoal {
+                    rule: Rule::ExFalso,
+                    goals: Vec::new(),
+                })
+            }
 
             // ```
             // A, B, Г => G
@@ -257,8 +261,11 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                 antecedent.extend_from_slice(&goal.antecedent[1..]);
                 return Some(Subgoal {
                     rule: Rule::AndL,
-                    goals: vec![Rc::new(Sequent{ antecedent, consequent: goal.consequent.clone() })],
-                })
+                    goals: vec![Rc::new(Sequent {
+                        antecedent,
+                        consequent: goal.consequent.clone(),
+                    })],
+                });
             }
 
             _ => (),
@@ -285,14 +292,39 @@ fn prove(goal: Rc<Sequent>) -> Option<Proof> {
                 return None;
             }
         }
-        return Some(Proof{
+        return Some(Proof {
             rule: subgoal.rule,
             premises,
             conclusion: goal,
-        })
+        });
     }
 
     // try remaining strategies in sequence
+    if let Type::Or { left, right } = goal.consequent.as_ref() {
+        let lgoal = Rc::new(Sequent {
+            antecedent: goal.antecedent.clone(),
+            consequent: left.clone(),
+        });
+        if let Some(lproof) = prove(lgoal) {
+            return Some(Proof {
+                rule: Rule::OrInjL,
+                premises: vec![lproof],
+                conclusion: goal,
+            })
+        }
+
+        let rgoal = Rc::new(Sequent {
+            antecedent: goal.antecedent.clone(),
+            consequent: right.clone(),
+        });
+        if let Some(rproof) = prove(rgoal) {
+            return Some(Proof {
+                rule: Rule::OrInjR,
+                premises: vec![rproof],
+                conclusion: goal,
+            })
+        }
+    }
 
     None
 }
@@ -300,9 +332,9 @@ fn prove(goal: Rc<Sequent>) -> Option<Proof> {
 fn main() {
     let var_a = Rc::new(Type::var("a"));
     let var_b = Rc::new(Type::var("b"));
-    let and = Rc::new(Type::and(var_a.clone(), var_b));
-    let goal = Rc::new(Sequent::from_type(Rc::new(Type::imp(and, var_a))));
-
+    let and = Rc::new(Type::and(var_a.clone(), var_b.clone()));
+    let or = Rc::new(Type::or(var_a, var_b));
+    let goal = Rc::new(Sequent::from_type(Rc::new(Type::imp(and, or))));
 
     if let Some(proof) = prove(goal) {
         println!("{:?}", proof);
