@@ -1,4 +1,9 @@
 use std::rc::Rc;
+use std::fmt;
+
+pub mod pretty;
+
+use pretty::Pretty;
 
 #[derive(Debug, Hash, PartialEq, Eq)]
 enum Type {
@@ -11,6 +16,40 @@ enum Type {
     Or { left: Rc<Type>, right: Rc<Type> },
 
     Bottom,
+}
+
+impl pretty::Pretty for Type {
+    fn pp(&self, f: &mut fmt::Formatter<'_>, prec: usize) -> fmt::Result {
+        match self {
+            Type::Var{ name } => name.pp(f, 0),
+            Type::Imp{ left, right } =>
+                pretty::parens(f, prec > 9, |f| {
+                    left.pp(f, 10)?;
+                    write!(f, " → ")?;
+                    right.pp(f, 0)
+                }),
+            Type::And{ left, right } =>
+                pretty::parens(f, prec > 3, |f| {
+                    left.pp(f, 3)?;
+                    write!(f, " ∧ ")?;
+                    right.pp(f, 2)
+                }),
+            Type::Or{ left, right } =>
+                pretty::parens(f, prec > 2, |f| {
+                    left.pp(f, 2)?;
+                    write!(f, " ∨ ")?;
+                    right.pp(f, 2)
+                }),
+            Type::Bottom =>
+                write!(f, "⊥"),
+        }
+    }
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.pp(f, 0)
+    }
 }
 
 impl Type {
@@ -57,6 +96,22 @@ struct Sequent {
     consequent: Rc<Type>,
 }
 
+impl Pretty for Sequent {
+    fn pp(&self, f: &mut fmt::Formatter<'_>, prec: usize) -> fmt::Result {
+        if !self.antecedent.is_empty() {
+            pretty::commas(f, &self.antecedent)?;
+            write!(f, " ⇒ ")?;
+        }
+        self.consequent.pp(f, 0)
+    }
+}
+
+impl fmt::Display for Sequent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.pp(f, 0)
+    }
+}
+
 impl Sequent {
     pub fn from_type(consequent: Rc<Type>) -> Self {
         Sequent {
@@ -89,79 +144,6 @@ impl Sequent {
     }
 }
 
-/*
-#[derive(Debug, Hash)]
-struct Inference {
-    premises: Vec<Rc<Sequent>>,
-    conclusion: Rc<Sequent>,
-}
-
-impl Inference {
-
-    /// ```
-    /// Г => A
-    /// -----------
-    /// Г => A ∨ B
-    /// ```
-    pub fn or_l(s: Rc<Sequent>) -> Option<Self> {
-        if let Some((left, right)) = s.antecedent.iter().find_map(|ty| match ty.as_ref() {
-            Type::Or { left, right } => Some((left, right)),
-            _ => None,
-        }) {
-            let mut l = s.as_ref().clone();
-            l.antecedent.push(left.clone());
-            let mut r = s.as_ref().clone();
-            r.antecedent.push(right.clone());
-            Some(Inference {
-                premises: vec![Rc::new(l), Rc::new(r)],
-                conclusion: s,
-            })
-        } else {
-            None
-        }
-    }
-
-    /// ```
-    /// Г => A
-    /// -----------
-    /// Г => A ∨ B
-    /// ```
-    pub fn or_r_l(s: Rc<Sequent>) -> Option<Self> {
-        match s.consequent.as_ref() {
-            Type::Or { left, .. } => Some(Inference {
-                premises: vec![Rc::new(Sequent {
-                    antecedent: s.antecedent.clone(),
-                    consequent: left.clone(),
-                })],
-                conclusion: s,
-            }),
-
-            _ => None,
-        }
-    }
-
-    /// ```
-    /// Г => B
-    /// -----------
-    /// Г => A ∨ B
-    /// ```
-    pub fn or_r_r(s: Rc<Sequent>) -> Option<Self> {
-        match s.consequent.as_ref() {
-            Type::Or { right, .. } => Some(Inference {
-                premises: vec![Rc::new(Sequent {
-                    antecedent: s.antecedent.clone(),
-                    consequent: right.clone(),
-                })],
-                conclusion: s,
-            }),
-
-            _ => None,
-        }
-    }
-}
-
-*/
-
 #[derive(Debug)]
 enum Rule {
     Axiom,
@@ -171,6 +153,22 @@ enum Rule {
     AndR,
     OrInjL,
     OrInjR,
+    OrL,
+}
+
+impl fmt::Display for Rule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Rule::Axiom => write!(f, "Axiom"),
+            Rule::ExFalso => write!(f, "Ex-Falso"),
+            Rule::ImpR => write!(f, "IMP-R"),
+            Rule::AndL => write!(f, "AND-L"),
+            Rule::AndR => write!(f, "AND-R"),
+            Rule::OrInjL => write!(f, "OR-INJ-L"),
+            Rule::OrInjR => write!(f, "OR-INJ-R"),
+            Rule::OrL => write!(f, "OR-L"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -179,7 +177,7 @@ struct Subgoal {
     goals: Vec<Rc<Sequent>>,
 }
 
-// These are steps that are always worth taking, and don't require back-tracking.
+// These are steps that will never fail, and are always worth taking to simplify the proof state
 fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
     match goal.consequent.as_ref() {
         // ```
@@ -234,7 +232,7 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
         _ => (),
     }
 
-    for assump in goal.antecedent.iter() {
+    for (ix, assump) in goal.antecedent.iter().enumerate() {
         match assump.as_ref() {
             // ```
             // ----------
@@ -258,7 +256,8 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                 let mut antecedent = Vec::with_capacity(goal.antecedent.len() + 1);
                 antecedent.push(left.clone());
                 antecedent.push(right.clone());
-                antecedent.extend_from_slice(&goal.antecedent[1..]);
+                antecedent.extend_from_slice(&goal.antecedent[0..ix]);
+                antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
                 return Some(Subgoal {
                     rule: Rule::AndL,
                     goals: vec![Rc::new(Sequent {
@@ -282,6 +281,23 @@ struct Proof {
     conclusion: Rc<Sequent>,
 }
 
+impl Pretty for Proof {
+    fn pp(&self, f: &mut fmt::Formatter<'_>, prec: usize) -> fmt::Result {
+        for premise in &self.premises {
+            premise.pp(f, 0)?;
+        }
+        write!(f, "------------- {}\n", self.rule)?;
+        self.conclusion.pp(f, 0)?;
+        writeln!(f, "")
+    }
+}
+
+impl fmt::Display for Proof {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.pp(f, 0)
+    }
+}
+
 fn prove(goal: Rc<Sequent>) -> Option<Proof> {
     if let Some(subgoal) = try_simple(goal.clone()) {
         let mut premises = Vec::with_capacity(subgoal.goals.len());
@@ -299,7 +315,7 @@ fn prove(goal: Rc<Sequent>) -> Option<Proof> {
         });
     }
 
-    // try remaining strategies in sequence
+    // try proving the branches of an or
     if let Type::Or { left, right } = goal.consequent.as_ref() {
         let lgoal = Rc::new(Sequent {
             antecedent: goal.antecedent.clone(),
@@ -310,7 +326,7 @@ fn prove(goal: Rc<Sequent>) -> Option<Proof> {
                 rule: Rule::OrInjL,
                 premises: vec![lproof],
                 conclusion: goal,
-            })
+            });
         }
 
         let rgoal = Rc::new(Sequent {
@@ -322,7 +338,46 @@ fn prove(goal: Rc<Sequent>) -> Option<Proof> {
                 rule: Rule::OrInjR,
                 premises: vec![rproof],
                 conclusion: goal,
-            })
+            });
+        }
+    }
+
+    for (ix, assump) in goal.antecedent.iter().enumerate() {
+        match assump.as_ref() {
+            // try proving the goal in terms of an or in the environment
+            Type::Or { left, right } => {
+                let mut lassumps = Vec::with_capacity(goal.antecedent.len());
+                lassumps.push(left.clone());
+                lassumps.extend_from_slice(&goal.antecedent[0..ix]);
+                lassumps.extend_from_slice(&goal.antecedent[ix..]);
+                let lproof = prove(Rc::new(Sequent {
+                    antecedent: lassumps,
+                    consequent: goal.consequent.clone(),
+                }));
+                if lproof.is_none() {
+                    continue;
+                }
+
+                let mut rassumps = Vec::with_capacity(goal.antecedent.len());
+                rassumps.push(right.clone());
+                rassumps.extend_from_slice(&goal.antecedent[0..ix]);
+                rassumps.extend_from_slice(&goal.antecedent[ix..]);
+                let rproof = prove(Rc::new(Sequent {
+                    antecedent: rassumps,
+                    consequent: goal.consequent.clone(),
+                }));
+                if rproof.is_none() {
+                    continue;
+                }
+
+                return Some(Proof{
+                    rule: Rule::OrL,
+                    premises: vec![lproof.unwrap(), rproof.unwrap()],
+                    conclusion: goal,
+                });
+            }
+
+            _ => (),
         }
     }
 
@@ -333,10 +388,10 @@ fn main() {
     let var_a = Rc::new(Type::var("a"));
     let var_b = Rc::new(Type::var("b"));
     let and = Rc::new(Type::and(var_a.clone(), var_b.clone()));
-    let or = Rc::new(Type::or(var_a, var_b));
-    let goal = Rc::new(Sequent::from_type(Rc::new(Type::imp(and, or))));
+    let or = Rc::new(Type::or(var_a.clone(), var_b.clone()));
+    let goal = Rc::new(Sequent::from_type(Rc::new(Type::imp(var_b, or))));
 
     if let Some(proof) = prove(goal) {
-        println!("{:?}", proof);
+        println!("{}", proof);
     }
 }
