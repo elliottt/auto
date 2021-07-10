@@ -1,5 +1,5 @@
-use std::rc::Rc;
 use std::fmt;
+use std::rc::Rc;
 
 pub mod pretty;
 
@@ -21,27 +21,23 @@ enum Type {
 impl pretty::Pretty for Type {
     fn pp(&self, f: &mut fmt::Formatter<'_>, prec: usize) -> fmt::Result {
         match self {
-            Type::Var{ name } => name.pp(f, 0),
-            Type::Imp{ left, right } =>
-                pretty::parens(f, prec > 9, |f| {
-                    left.pp(f, 10)?;
-                    write!(f, " → ")?;
-                    right.pp(f, 0)
-                }),
-            Type::And{ left, right } =>
-                pretty::parens(f, prec > 3, |f| {
-                    left.pp(f, 3)?;
-                    write!(f, " ∧ ")?;
-                    right.pp(f, 2)
-                }),
-            Type::Or{ left, right } =>
-                pretty::parens(f, prec > 2, |f| {
-                    left.pp(f, 2)?;
-                    write!(f, " ∨ ")?;
-                    right.pp(f, 2)
-                }),
-            Type::Bottom =>
-                write!(f, "⊥"),
+            Type::Var { name } => name.pp(f, 0),
+            Type::Imp { left, right } => pretty::parens(f, prec > 9, |f| {
+                left.pp(f, 10)?;
+                write!(f, " → ")?;
+                right.pp(f, 0)
+            }),
+            Type::And { left, right } => pretty::parens(f, prec > 3, |f| {
+                left.pp(f, 3)?;
+                write!(f, " ∧ ")?;
+                right.pp(f, 2)
+            }),
+            Type::Or { left, right } => pretty::parens(f, prec > 2, |f| {
+                left.pp(f, 2)?;
+                write!(f, " ∨ ")?;
+                right.pp(f, 2)
+            }),
+            Type::Bottom => write!(f, "⊥"),
         }
     }
 }
@@ -53,13 +49,10 @@ impl fmt::Display for Type {
 }
 
 impl Type {
-    pub fn size(&self) -> usize {
+    pub fn is_atomic(&self) -> bool {
         match self {
-            Type::Var { .. } => 1,
-            Type::Imp { left, right } => left.size() + right.size() + 1,
-            Type::And { left, right } => left.size() + right.size() + 2,
-            Type::Or { left, right } => left.size() + right.size() + 1,
-            Type::Bottom => 1,
+            Type::Var { .. } => true,
+            _ => false,
         }
     }
 
@@ -97,7 +90,7 @@ struct Sequent {
 }
 
 impl Pretty for Sequent {
-    fn pp(&self, f: &mut fmt::Formatter<'_>, prec: usize) -> fmt::Result {
+    fn pp(&self, f: &mut fmt::Formatter<'_>, _prec: usize) -> fmt::Result {
         if !self.antecedent.is_empty() {
             pretty::commas(f, &self.antecedent)?;
             write!(f, " ⇒ ")?;
@@ -126,22 +119,6 @@ impl Sequent {
             .find(|other| other.as_ref() == ty)
             .is_some()
     }
-
-    pub fn assume(mut self, ty: Rc<Type>) -> Self {
-        self.antecedent.push(ty);
-        self
-    }
-
-    /// true when Type::Bottom shows in the antecedent of the sequent.
-    pub fn false_assumption(&self) -> bool {
-        self.antecedent
-            .iter()
-            .find(|ty| match ty.as_ref() {
-                Type::Bottom => true,
-                _ => false,
-            })
-            .is_some()
-    }
 }
 
 #[derive(Debug)]
@@ -154,6 +131,10 @@ enum Rule {
     OrInjL,
     OrInjR,
     OrL,
+    ImpVarL,
+    ImpAndL,
+    ImpOrL,
+    ImpImpL,
 }
 
 impl fmt::Display for Rule {
@@ -167,6 +148,10 @@ impl fmt::Display for Rule {
             Rule::OrInjL => write!(f, "OR-INJ-L"),
             Rule::OrInjR => write!(f, "OR-INJ-R"),
             Rule::OrL => write!(f, "OR-L"),
+            Rule::ImpVarL => write!(f, "IMP-VAR-L"),
+            Rule::ImpAndL => write!(f, "IMP-AND-L"),
+            Rule::ImpOrL => write!(f, "IMP-OR-L"),
+            Rule::ImpImpL => write!(f, "IMP-IMP-L"),
         }
     }
 }
@@ -267,6 +252,110 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                 });
             }
 
+            Type::Imp { left, right } => {
+                // ```
+                // B, A, Г => G
+                // ----------------
+                // A → B, A, Г => G
+                // ```
+                if left.is_atomic() && goal.has_assumption(left) {
+                    let mut antecedent = Vec::with_capacity(goal.antecedent.len());
+                    antecedent.push(right.clone());
+                    antecedent.extend_from_slice(&goal.antecedent[0..ix]);
+                    antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
+                    return Some(Subgoal {
+                        rule: Rule::ImpVarL,
+                        goals: vec![Rc::new(Sequent {
+                            antecedent,
+                            consequent: goal.consequent.clone(),
+                        })],
+                    });
+                }
+
+                // ```
+                // A → (B → C) Г => G
+                // -------------------
+                // (A ∧ B) → B, Г => G
+                // ```
+                if let Type::And {
+                    left: al,
+                    right: ar,
+                } = left.as_ref()
+                {
+                    let mut antecedent = Vec::with_capacity(goal.antecedent.len());
+                    antecedent.push(Rc::new(Type::imp(
+                        al.clone(),
+                        Rc::new(Type::imp(ar.clone(), right.clone())),
+                    )));
+                    antecedent.extend_from_slice(&goal.antecedent[0..ix]);
+                    antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
+                    return Some(Subgoal {
+                        rule: Rule::ImpAndL,
+                        goals: vec![Rc::new(Sequent {
+                            antecedent,
+                            consequent: goal.consequent.clone(),
+                        })],
+                    });
+                }
+
+                // ```
+                // A → C, B → C, Г => G
+                // --------------------
+                // (A ∨ B) → C, Г => G
+                // ```
+                if let Type::Or {
+                    left: ol,
+                    right: or,
+                } = left.as_ref()
+                {
+                    let mut antecedent = Vec::with_capacity(goal.antecedent.len() + 1);
+                    antecedent.push(Rc::new(Type::imp(ol.clone(), right.clone())));
+                    antecedent.push(Rc::new(Type::imp(or.clone(), right.clone())));
+                    antecedent.extend_from_slice(&goal.antecedent[0..ix]);
+                    antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
+                    return Some(Subgoal {
+                        rule: Rule::ImpOrL,
+                        goals: vec![Rc::new(Sequent {
+                            antecedent,
+                            consequent: goal.consequent.clone(),
+                        })],
+                    });
+                }
+
+                // ```
+                // B → C, Г => A → B  B, Г => G
+                // ----------------------------
+                //      (A → B) → C, Г => G
+                // ```
+                if let Type::Imp { right: ir, .. } = left.as_ref() {
+                    let mut lassumps = Vec::with_capacity(goal.antecedent.len());
+                    lassumps.push(Rc::new(Type::imp(ir.clone(), right.clone())));
+                    lassumps.extend_from_slice(&goal.antecedent[0..ix]);
+                    lassumps.extend_from_slice(&goal.antecedent[ix + 1..]);
+
+                    let mut rassumps = Vec::with_capacity(goal.antecedent.len());
+                    rassumps.push(right.clone());
+                    rassumps.extend_from_slice(&goal.antecedent[0..ix]);
+                    rassumps.extend_from_slice(&goal.antecedent[ix + 1..]);
+
+                    return Some(Subgoal {
+                        rule: Rule::ImpImpL,
+                        goals: vec![
+                            Rc::new(Sequent {
+                                antecedent: lassumps,
+                                consequent: left.clone(),
+                            }),
+                            Rc::new(Sequent {
+                                antecedent: rassumps,
+                                consequent: goal.consequent.clone(),
+                            }),
+                        ],
+                    });
+                }
+
+                return None;
+            }
+
             _ => (),
         }
     }
@@ -282,7 +371,7 @@ struct Proof {
 }
 
 impl Pretty for Proof {
-    fn pp(&self, f: &mut fmt::Formatter<'_>, prec: usize) -> fmt::Result {
+    fn pp(&self, f: &mut fmt::Formatter<'_>, _prec: usize) -> fmt::Result {
         for premise in &self.premises {
             premise.pp(f, 0)?;
         }
@@ -370,7 +459,7 @@ fn prove(goal: Rc<Sequent>) -> Option<Proof> {
                     continue;
                 }
 
-                return Some(Proof{
+                return Some(Proof {
                     rule: Rule::OrL,
                     premises: vec![lproof.unwrap(), rproof.unwrap()],
                     conclusion: goal,
@@ -387,7 +476,6 @@ fn prove(goal: Rc<Sequent>) -> Option<Proof> {
 fn main() {
     let var_a = Rc::new(Type::var("a"));
     let var_b = Rc::new(Type::var("b"));
-    let and = Rc::new(Type::and(var_a.clone(), var_b.clone()));
     let or = Rc::new(Type::or(var_a.clone(), var_b.clone()));
     let goal = Rc::new(Sequent::from_type(Rc::new(Type::imp(var_b, or))));
 

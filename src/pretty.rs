@@ -12,7 +12,7 @@ impl <T: Pretty> Pretty for rc::Rc<T> {
 }
 
 impl Pretty for str {
-    fn pp(&self, f: &mut fmt::Formatter<'_>, prec: usize) -> fmt::Result {
+    fn pp(&self, f: &mut fmt::Formatter<'_>, _prec: usize) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
