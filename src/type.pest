@@ -1,0 +1,12 @@
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+atom = @{ LETTER ~ (LETTER | NUMBER | "_" | "'")* }
+bottom = @{ "_|_" }
+
+iexp = { aexp ~ ( "->" ~ iexp )?  }
+aexp = { oexp ~ ( "/\\" ~ aexp )?  }
+oexp = { atomic ~ ( "\\/" ~ oexp )?  }
+atomic = { atom | bottom | ( "(" ~ iexp ~ ")" ) }
+
+type_ = { SOI ~ iexp ~ EOI }
