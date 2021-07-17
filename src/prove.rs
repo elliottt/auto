@@ -34,11 +34,12 @@ impl Sequent {
         }
     }
 
+    pub fn find_assumption(&self, ty: &Type) -> Option<&Rc<Type>> {
+        self.antecedent.iter().find(|other| other.as_ref() == ty)
+    }
+
     pub fn has_assumption(&self, ty: &Type) -> bool {
-        self.antecedent
-            .iter()
-            .find(|other| other.as_ref() == ty)
-            .is_some()
+        self.find_assumption(ty).is_some()
     }
 }
 
@@ -47,12 +48,12 @@ pub enum Rule {
     Axiom,
     ExFalso,
     ImpR,
-    AndL,
+    AndL { ty: Rc<Type> },
     AndR,
     OrInjL,
     OrInjR,
     OrL,
-    ImpVarL,
+    ImpVarL { fun: Rc<Type>, arg: Rc<Type> },
     ImpAndL,
     ImpOrL,
     ImpImpL,
@@ -64,12 +65,12 @@ impl fmt::Display for Rule {
             Rule::Axiom => write!(f, "Axiom"),
             Rule::ExFalso => write!(f, "Ex-Falso"),
             Rule::ImpR => write!(f, "IMP-R"),
-            Rule::AndL => write!(f, "AND-L"),
+            Rule::AndL { .. } => write!(f, "AND-L"),
             Rule::AndR => write!(f, "AND-R"),
             Rule::OrInjL => write!(f, "OR-INJ-L"),
             Rule::OrInjR => write!(f, "OR-INJ-R"),
             Rule::OrL => write!(f, "OR-L"),
-            Rule::ImpVarL => write!(f, "IMP-VAR-L"),
+            Rule::ImpVarL { .. } => write!(f, "IMP-VAR-L"),
             Rule::ImpAndL => write!(f, "IMP-AND-L"),
             Rule::ImpOrL => write!(f, "IMP-OR-L"),
             Rule::ImpImpL => write!(f, "IMP-IMP-L"),
@@ -103,8 +104,9 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
         // Г => A -> B
         // ```
         Type::Imp { left, right } => {
-            let mut antecedent = goal.antecedent.clone();
+            let mut antecedent = Vec::with_capacity(goal.antecedent.len() + 1);
             antecedent.push(left.clone());
+            antecedent.extend_from_slice(&goal.antecedent);
             return Some(Subgoal {
                 rule: Rule::ImpR,
                 goals: vec![Rc::new(Sequent {
@@ -165,7 +167,7 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                 antecedent.extend_from_slice(&goal.antecedent[0..ix]);
                 antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
                 return Some(Subgoal {
-                    rule: Rule::AndL,
+                    rule: Rule::AndL { ty: assump.clone() },
                     goals: vec![Rc::new(Sequent {
                         antecedent,
                         consequent: goal.consequent.clone(),
@@ -179,18 +181,24 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                 // ----------------
                 // A → B, A, Г => G
                 // ```
-                if left.is_atomic() && goal.has_assumption(left) {
-                    let mut antecedent = Vec::with_capacity(goal.antecedent.len());
-                    antecedent.push(right.clone());
-                    antecedent.extend_from_slice(&goal.antecedent[0..ix]);
-                    antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
-                    return Some(Subgoal {
-                        rule: Rule::ImpVarL,
-                        goals: vec![Rc::new(Sequent {
-                            antecedent,
-                            consequent: goal.consequent.clone(),
-                        })],
-                    });
+                // TODO: should this consume the argument as well?
+                if left.is_atomic() {
+                    if let Some(arg) = goal.find_assumption(&left) {
+                        let mut antecedent = Vec::with_capacity(goal.antecedent.len());
+                        antecedent.push(right.clone());
+                        antecedent.extend_from_slice(&goal.antecedent[0..ix]);
+                        antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
+                        return Some(Subgoal {
+                            rule: Rule::ImpVarL {
+                                fun: assump.clone(),
+                                arg: arg.clone(),
+                            },
+                            goals: vec![Rc::new(Sequent {
+                                antecedent,
+                                consequent: goal.consequent.clone(),
+                            })],
+                        });
+                    }
                 }
 
                 // ```

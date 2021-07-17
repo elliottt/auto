@@ -7,6 +7,26 @@ use crate::prove::{Proof, Rule};
 use crate::types::Type;
 
 #[derive(Debug)]
+pub struct Binding {
+    pub lhs: Rc<Term>,
+    pub rhs: Rc<Term>,
+}
+
+impl Pretty for Binding {
+    fn pp(&self, f: &mut fmt::Formatter<'_>, _prec: usize) -> fmt::Result {
+        self.lhs.pp(f, 10)?;
+        write!(f, " = ")?;
+        self.rhs.pp(f, 0)
+    }
+}
+
+impl fmt::Display for Binding {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.pp(f, 0)
+    }
+}
+
+#[derive(Debug)]
 pub enum Term {
     Lambda {
         var: String,
@@ -22,7 +42,12 @@ pub enum Term {
     },
     Tuple {
         elems: Vec<Rc<Term>>,
-    }
+    },
+    Let {
+        lhs: Rc<Term>,
+        rhs: Rc<Term>,
+        body: Rc<Term>,
+    },
 }
 
 impl Pretty for Term {
@@ -53,6 +78,17 @@ impl Pretty for Term {
                 write!(f, "(")?;
                 pretty::commas(f, elems)?;
                 write!(f, ")")?;
+            }
+
+            Term::Let { lhs, rhs, body } => {
+                pretty::parens(f, prec >= 5, |f| {
+                    write!(f, "let ")?;
+                    lhs.pp(f, 10)?;
+                    write!(f, " = ")?;
+                    rhs.pp(f, 0)?;
+                    write!(f, " in ")?;
+                    body.pp(f, 0)
+                })?;
             }
         }
         Ok(())
@@ -116,12 +152,16 @@ impl<'a> Env<'a> {
                 let var = self.name(&proof.conclusion.consequent);
                 return Rc::new(Term::Var { var });
             }
-            Rule::ExFalso => {}
+            Rule::ExFalso => {
+                return Rc::new(Term::Var {
+                    var: String::from("undefined"),
+                });
+            }
             Rule::ImpR => {
                 // this will have one assumption with the variable introduced on the left, and the
                 // body on the right
                 let premise = &proof.premises[0];
-                let ty = premise.conclusion.antecedent.last().unwrap();
+                let ty = &premise.conclusion.antecedent[0];
                 let var = self.name(&ty);
                 let body = self.from_proof(&premise);
                 return Rc::new(Term::Lambda {
@@ -130,13 +170,33 @@ impl<'a> Env<'a> {
                     body,
                 });
             }
-            Rule::AndL => {}
+            Rule::AndL { ref ty } => {
+                let premise = &proof.premises[0];
+                let lhs = Rc::new(Term::Tuple {
+                    elems: vec![
+                        Rc::new(Term::Var {
+                            var: self.name(&premise.conclusion.antecedent[0]),
+                        }),
+                        Rc::new(Term::Var {
+                            var: self.name(&premise.conclusion.antecedent[1]),
+                        }),
+                    ],
+                });
+                let rhs = Rc::new(Term::Var {
+                    var: self.name(&ty),
+                });
+                return Rc::new(Term::Let {
+                    lhs,
+                    rhs,
+                    body: self.from_proof(premise),
+                });
+            }
             Rule::AndR => {
                 let elems = vec![
                     self.from_proof(&proof.premises[0]),
                     self.from_proof(&proof.premises[1]),
                 ];
-                return Rc::new(Term::Tuple{ elems });
+                return Rc::new(Term::Tuple { elems });
             }
             Rule::OrInjL => {
                 let premise = &proof.premises[0];
@@ -155,7 +215,25 @@ impl<'a> Env<'a> {
                 return Rc::new(Term::App { fun, arg });
             }
             Rule::OrL => {}
-            Rule::ImpVarL => {}
+            Rule::ImpVarL { ref fun, ref arg } => {
+                let premise = &proof.premises[0];
+                let lhs = Rc::new(Term::Var {
+                    var: self.name(&premise.conclusion.antecedent[0]),
+                });
+                let rhs = Rc::new(Term::App {
+                    fun: Rc::new(Term::Var {
+                        var: self.name(fun),
+                    }),
+                    arg: Rc::new(Term::Var {
+                        var: self.name(arg),
+                    }),
+                });
+                return Rc::new(Term::Let {
+                    lhs,
+                    rhs,
+                    body: self.from_proof(premise),
+                });
+            }
             Rule::ImpAndL => {}
             Rule::ImpOrL => {}
             Rule::ImpImpL => {}
