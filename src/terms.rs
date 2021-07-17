@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::fmt;
+use std::rc::Rc;
 
 use crate::pretty::{self, Pretty};
 use crate::prove::{Proof, Rule};
@@ -25,14 +25,14 @@ pub enum Term {
 impl Pretty for Term {
     fn pp(&self, f: &mut fmt::Formatter<'_>, prec: usize) -> fmt::Result {
         match self {
-            Term::Lambda{ var, ty, body } => {
+            Term::Lambda { var, ty, body } => {
                 pretty::parens(f, prec >= 5, |f| {
                     write!(f, "\\ {}: ", var)?;
                     ty.pp(f, 0)?;
                     write!(f, ". ")?;
                     body.pp(f, 0)
                 })?;
-            },
+            }
 
             Term::App { fun, arg } => {
                 pretty::parens(f, prec >= 5, |f| {
@@ -40,7 +40,7 @@ impl Pretty for Term {
                     write!(f, " ")?;
                     arg.pp(f, 5)
                 })?;
-            },
+            }
 
             Term::Var { var } => {
                 write!(f, "{}", var)?;

@@ -1,6 +1,5 @@
-
-use std::rc::Rc;
 use std::fmt;
+use std::rc::Rc;
 
 use crate::pretty::{self, Pretty};
 use crate::types::Type;
@@ -394,4 +393,3 @@ pub fn prove(goal: Rc<Sequent>) -> Option<Proof> {
 
     None
 }
-
