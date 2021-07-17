@@ -112,7 +112,7 @@ impl<'a> Env<'a> {
                 // this will have one assumption with the variable introduced on the left, and the
                 // body on the right
                 let premise = &proof.premises[0];
-                let ty = &premise.conclusion.antecedent[0];
+                let ty = premise.conclusion.antecedent.last().unwrap();
                 let var = self.name(&ty);
                 let body = self.from_proof(&premise);
                 return Rc::new(Term::Lambda {
@@ -123,7 +123,14 @@ impl<'a> Env<'a> {
             }
             Rule::AndL => {}
             Rule::AndR => {}
-            Rule::OrInjL => {}
+            Rule::OrInjL => {
+                let premise = &proof.premises[0];
+                let arg = self.from_proof(&premise);
+                let fun = Rc::new(Term::Var {
+                    var: String::from("Left"),
+                });
+                return Rc::new(Term::App { fun, arg });
+            }
             Rule::OrInjR => {
                 let premise = &proof.premises[0];
                 let arg = self.from_proof(&premise);

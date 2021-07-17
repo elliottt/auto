@@ -1,7 +1,10 @@
 extern crate pest;
+extern crate repl_rs;
 #[macro_use]
 extern crate pest_derive;
 
+use repl_rs::{Command, Convert, Parameter, Repl, Result, Value};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 mod parser;
@@ -12,16 +15,25 @@ mod types;
 
 use prove::{prove, Sequent};
 use terms::Term;
-use types::Type;
 
-fn main() {
-    let var_a = Rc::new(Type::var("a"));
-    let var_b = Rc::new(Type::var("b"));
-    let or = Rc::new(Type::or(var_a.clone(), var_b.clone()));
-    let goal = Rc::new(Sequent::from_type(Rc::new(Type::imp(var_b, or))));
+fn derive<T>(args: HashMap<String, Value>, _: &mut T) -> Result<Option<String>> {
+    let ty_str: String = args["type"].convert()?;
+    let ty = parser::parse_type(&ty_str);
 
-    println!("goal:  {}", goal);
-    if let Some(proof) = prove(goal) {
-        println!("proof: {}", Term::from_proof(&proof));
+    if let Some(proof) = prove(Rc::new(Sequent::from_type(ty.clone()))) {
+        println!("{}", Term::from_proof(&proof));
+    } else {
+        println!("Unable to prove: {}", ty);
     }
+
+    Ok(None)
+}
+
+fn main() -> Result<()> {
+    let mut repl = Repl::new(()).with_name("auto").add_command(
+        Command::new("?", derive)
+            .with_parameter(Parameter::new("type").set_required(true)?)?
+            .with_help("Derive a term from a type"),
+    );
+    repl.run()
 }
