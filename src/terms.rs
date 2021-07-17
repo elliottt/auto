@@ -20,6 +20,9 @@ pub enum Term {
     Var {
         var: String,
     },
+    Tuple {
+        elems: Vec<Rc<Term>>,
+    }
 }
 
 impl Pretty for Term {
@@ -44,6 +47,12 @@ impl Pretty for Term {
 
             Term::Var { var } => {
                 write!(f, "{}", var)?;
+            }
+
+            Term::Tuple { elems } => {
+                write!(f, "(")?;
+                pretty::commas(f, elems)?;
+                write!(f, ")")?;
             }
         }
         Ok(())
@@ -122,7 +131,13 @@ impl<'a> Env<'a> {
                 });
             }
             Rule::AndL => {}
-            Rule::AndR => {}
+            Rule::AndR => {
+                let elems = vec![
+                    self.from_proof(&proof.premises[0]),
+                    self.from_proof(&proof.premises[1]),
+                ];
+                return Rc::new(Term::Tuple{ elems });
+            }
             Rule::OrInjL => {
                 let premise = &proof.premises[0];
                 let arg = self.from_proof(&premise);
