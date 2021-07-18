@@ -47,7 +47,7 @@ impl Sequent {
 
 #[derive(Debug)]
 pub enum Rule {
-    Axiom,
+    Axiom { ty: Rc<Type> },
     ExFalso,
     ImpR,
     AndL { ty: Rc<Type> },
@@ -64,7 +64,7 @@ pub enum Rule {
 impl Pretty for Rule {
     fn pp(&self, _prec: usize) -> RcDoc {
         match self {
-            Rule::Axiom => RcDoc::text("Axiom"),
+            Rule::Axiom { .. } => RcDoc::text("Axiom"),
             Rule::ExFalso => RcDoc::text("Ex-Falso"),
             Rule::ImpR => RcDoc::text("IMP-R"),
             Rule::AndL { .. } => RcDoc::text("AND-L"),
@@ -99,11 +99,13 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
         // ----------
         // A , Г => A
         // ```
-        _ if goal.has_assumption(goal.consequent.as_ref()) => {
-            return Some(Subgoal {
-                rule: Rule::Axiom,
-                goals: Vec::new(),
-            })
+        Type::Var { .. } => {
+            if let Some(assump) = goal.find_assumption(goal.consequent.as_ref()) {
+                return Some(Subgoal {
+                    rule: Rule::Axiom { ty: assump.clone() },
+                    goals: Vec::new(),
+                })
+            }
         }
 
         // ```

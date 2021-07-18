@@ -56,7 +56,7 @@ impl Pretty for Term {
         match self {
             Term::Lambda { var, ty, body } => pretty::parens(
                 prec >= 5,
-                RcDoc::text("\\ ")
+                RcDoc::text("λ ")
                     .append(RcDoc::text(var))
                     .append(RcDoc::text(": "))
                     .append(ty.pp(0))
@@ -102,8 +102,8 @@ impl Term {
     }
 }
 
-struct Env<'a> {
-    vars: HashMap<&'a Type, String>,
+struct Env {
+    vars: HashMap<*const Type, String>,
     next: usize,
 }
 
@@ -121,7 +121,7 @@ fn next_name(mut ix: usize) -> String {
     }
 }
 
-impl<'a> Env<'a> {
+impl Env {
     fn new() -> Self {
         Env {
             vars: HashMap::new(),
@@ -129,21 +129,22 @@ impl<'a> Env<'a> {
         }
     }
 
-    fn name(&mut self, ty: &'a Type) -> String {
-        if let Some(name) = self.vars.get(ty) {
+    fn name(&mut self, ty: &Rc<Type>) -> String {
+        let ptr = Rc::as_ptr(ty);
+        if let Some(name) = self.vars.get(&ptr) {
             name.clone()
         } else {
             let name = next_name(self.next);
             self.next += 1;
-            self.vars.insert(ty, name.clone());
+            self.vars.insert(ptr, name.clone());
             name
         }
     }
 
-    fn from_proof(&mut self, proof: &'a Proof) -> Rc<Term> {
+    fn from_proof(&mut self, proof: &Proof) -> Rc<Term> {
         match proof.rule {
-            Rule::Axiom => {
-                let var = self.name(&proof.conclusion.consequent);
+            Rule::Axiom { ref ty } => {
+                let var = self.name(ty);
                 return Rc::new(Term::Var { var });
             }
             Rule::ExFalso => {
