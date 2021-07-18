@@ -1,7 +1,7 @@
 use std::fmt;
 use std::rc::Rc;
 
-use crate::pretty::{self, Pretty};
+use crate::pretty::{Pretty, RcDoc};
 use crate::types::Type;
 
 #[derive(Debug, Clone, Hash, PartialEq)]
@@ -11,18 +11,20 @@ pub struct Sequent {
 }
 
 impl Pretty for Sequent {
-    fn pp(&self, f: &mut fmt::Formatter<'_>, _prec: usize) -> fmt::Result {
-        if !self.antecedent.is_empty() {
-            pretty::commas(f, &self.antecedent)?;
-            write!(f, " ⇒ ")?;
-        }
-        self.consequent.pp(f, 0)
+    fn pp(&self, _prec: usize) -> RcDoc {
+        let res = if !self.antecedent.is_empty() {
+            RcDoc::intersperse(self.antecedent.iter().map(|ty| ty.pp(0)), RcDoc::text(", "))
+                .append(RcDoc::text(" ⇒ "))
+        } else {
+            RcDoc::nil()
+        };
+        res.append(self.consequent.pp(0))
     }
 }
 
 impl fmt::Display for Sequent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.pp(f, 0)
+        self.pp(0).render_fmt(80, f)
     }
 }
 
@@ -59,22 +61,28 @@ pub enum Rule {
     ImpImpL,
 }
 
+impl Pretty for Rule {
+    fn pp(&self, _prec: usize) -> RcDoc {
+        match self {
+            Rule::Axiom => RcDoc::text("Axiom"),
+            Rule::ExFalso => RcDoc::text("Ex-Falso"),
+            Rule::ImpR => RcDoc::text("IMP-R"),
+            Rule::AndL { .. } => RcDoc::text("AND-L"),
+            Rule::AndR => RcDoc::text("AND-R"),
+            Rule::OrInjL => RcDoc::text("OR-INJ-L"),
+            Rule::OrInjR => RcDoc::text("OR-INJ-R"),
+            Rule::OrL => RcDoc::text("OR-L"),
+            Rule::ImpVarL { .. } => RcDoc::text("IMP-VAR-L"),
+            Rule::ImpAndL => RcDoc::text("IMP-AND-L"),
+            Rule::ImpOrL => RcDoc::text("IMP-OR-L"),
+            Rule::ImpImpL => RcDoc::text("IMP-IMP-L"),
+        }
+    }
+}
+
 impl fmt::Display for Rule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Rule::Axiom => write!(f, "Axiom"),
-            Rule::ExFalso => write!(f, "Ex-Falso"),
-            Rule::ImpR => write!(f, "IMP-R"),
-            Rule::AndL { .. } => write!(f, "AND-L"),
-            Rule::AndR => write!(f, "AND-R"),
-            Rule::OrInjL => write!(f, "OR-INJ-L"),
-            Rule::OrInjR => write!(f, "OR-INJ-R"),
-            Rule::OrL => write!(f, "OR-L"),
-            Rule::ImpVarL { .. } => write!(f, "IMP-VAR-L"),
-            Rule::ImpAndL => write!(f, "IMP-AND-L"),
-            Rule::ImpOrL => write!(f, "IMP-OR-L"),
-            Rule::ImpImpL => write!(f, "IMP-IMP-L"),
-        }
+        self.pp(0).render_fmt(80, f)
     }
 }
 
@@ -300,19 +308,17 @@ pub struct Proof {
 }
 
 impl Pretty for Proof {
-    fn pp(&self, f: &mut fmt::Formatter<'_>, _prec: usize) -> fmt::Result {
-        for premise in &self.premises {
-            premise.pp(f, 0)?;
-        }
-        write!(f, "------------- {}\n", self.rule)?;
-        self.conclusion.pp(f, 0)?;
-        writeln!(f, "")
+    fn pp(&self, _prec: usize) -> RcDoc {
+        RcDoc::concat(self.premises.iter().map(|proof| proof.pp(0)))
+            .append(RcDoc::text("------------- ").append(self.rule.pp(0)))
+            .append(RcDoc::line())
+            .append(self.conclusion.pp(0))
     }
 }
 
 impl fmt::Display for Proof {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.pp(f, 0)
+        self.pp(0).render_fmt(80, f)
     }
 }
 

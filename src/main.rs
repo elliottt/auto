@@ -15,7 +15,6 @@ mod types;
 
 use prove::{prove, Sequent};
 use terms::Term;
-use pretty::PP;
 
 fn derive<T>(args: HashMap<String, Value>, _: &mut T) -> Result<Option<String>> {
     let ty_str: String = args["type"].convert()?;
@@ -31,13 +30,6 @@ fn derive<T>(args: HashMap<String, Value>, _: &mut T) -> Result<Option<String>> 
 }
 
 fn main() -> Result<()> {
-
-    let test = PP::hcat(
-        PP::vcat(PP::from("hi!"), PP::from("")),
-        PP::vcat(PP::from(""), PP::from("there!")),
-    );
-    println!("{}", test);
-
     let mut repl = Repl::new(()).with_name("auto").add_command(
         Command::new("?", derive)
             .with_parameter(Parameter::new("type").set_required(true)?)?

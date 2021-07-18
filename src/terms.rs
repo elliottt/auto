@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
-use crate::pretty::{self, Pretty};
+use crate::pretty::{self, Pretty, RcDoc};
 use crate::prove::{Proof, Rule};
 use crate::types::Type;
 
@@ -13,16 +13,17 @@ pub struct Binding {
 }
 
 impl Pretty for Binding {
-    fn pp(&self, f: &mut fmt::Formatter<'_>, _prec: usize) -> fmt::Result {
-        self.lhs.pp(f, 10)?;
-        write!(f, " = ")?;
-        self.rhs.pp(f, 0)
+    fn pp(&self, _prec: usize) -> RcDoc {
+        self.lhs
+            .pp(10)
+            .append(RcDoc::text(" = "))
+            .append(self.rhs.pp(0))
     }
 }
 
 impl fmt::Display for Binding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.pp(f, 0)
+        self.pp(0).render_fmt(80, f)
     }
 }
 
@@ -51,53 +52,46 @@ pub enum Term {
 }
 
 impl Pretty for Term {
-    fn pp(&self, f: &mut fmt::Formatter<'_>, prec: usize) -> fmt::Result {
+    fn pp(&self, prec: usize) -> RcDoc {
         match self {
-            Term::Lambda { var, ty, body } => {
-                pretty::parens(f, prec >= 5, |f| {
-                    write!(f, "\\ {}: ", var)?;
-                    ty.pp(f, 0)?;
-                    write!(f, ". ")?;
-                    body.pp(f, 0)
-                })?;
-            }
+            Term::Lambda { var, ty, body } => pretty::parens(
+                prec >= 5,
+                RcDoc::text("\\ ")
+                    .append(RcDoc::text(var))
+                    .append(RcDoc::text(": "))
+                    .append(ty.pp(0))
+                    .append(RcDoc::text(". "))
+                    .append(body.pp(0)),
+            ),
 
-            Term::App { fun, arg } => {
-                pretty::parens(f, prec >= 5, |f| {
-                    fun.pp(f, 0)?;
-                    write!(f, " ")?;
-                    arg.pp(f, 5)
-                })?;
-            }
+            Term::App { fun, arg } => pretty::parens(
+                prec >= 5,
+                fun.pp(0).append(RcDoc::text(" ")).append(arg.pp(5)),
+            ),
 
-            Term::Var { var } => {
-                write!(f, "{}", var)?;
-            }
+            Term::Var { var } => RcDoc::text(var),
 
-            Term::Tuple { elems } => {
-                write!(f, "(")?;
-                pretty::commas(f, elems)?;
-                write!(f, ")")?;
-            }
+            Term::Tuple { elems } => pretty::parens(
+                true,
+                RcDoc::intersperse(elems.iter().map(|term| term.pp(0)), RcDoc::text(", ")),
+            ),
 
-            Term::Let { lhs, rhs, body } => {
-                pretty::parens(f, prec >= 5, |f| {
-                    write!(f, "let ")?;
-                    lhs.pp(f, 10)?;
-                    write!(f, " = ")?;
-                    rhs.pp(f, 0)?;
-                    write!(f, " in ")?;
-                    body.pp(f, 0)
-                })?;
-            }
+            Term::Let { lhs, rhs, body } => pretty::parens(
+                prec >= 5,
+                RcDoc::text("let ")
+                    .append(lhs.pp(10))
+                    .append(RcDoc::text(" = "))
+                    .append(rhs.pp(0))
+                    .append(RcDoc::text(" in "))
+                    .append(body.pp(0)),
+            ),
         }
-        Ok(())
     }
 }
 
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.pp(f, 0)
+        self.pp(0).render_fmt(80, f)
     }
 }
 
