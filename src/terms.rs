@@ -211,22 +211,13 @@ impl Env {
             }
             Rule::OrL => {}
             Rule::ImpVarL { ref fun, ref arg } => {
-                let premise = &proof.premises[0];
-                let lhs = Rc::new(Term::Var {
-                    var: self.name(&premise.conclusion.antecedent[0]),
-                });
-                let rhs = Rc::new(Term::App {
+                return Rc::new(Term::App {
                     fun: Rc::new(Term::Var {
                         var: self.name(fun),
                     }),
                     arg: Rc::new(Term::Var {
                         var: self.name(arg),
                     }),
-                });
-                return Rc::new(Term::Let {
-                    lhs,
-                    rhs,
-                    body: self.from_proof(premise),
                 });
             }
             Rule::ImpAndL => {}
