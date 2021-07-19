@@ -291,8 +291,6 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                         ],
                     });
                 }
-
-                return None;
             }
 
             _ => (),
