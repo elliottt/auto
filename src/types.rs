@@ -21,15 +21,15 @@ impl pretty::Pretty for Type {
         match self {
             Type::Var { name } => name.pp(0),
             Type::Imp { left, right } => pretty::parens(
-                prec > 1,
-                left.pp(1).append(RcDoc::text(" → ")).append(right.pp(1)),
+                prec >= 1,
+                left.pp(1).append(RcDoc::text(" → ")).append(right.pp(0)),
             ),
             Type::And { left, right } => pretty::parens(
-                prec > 3,
+                prec >= 3,
                 left.pp(3).append(RcDoc::text(" ∧ ")).append(right.pp(3)),
             ),
             Type::Or { left, right } => pretty::parens(
-                prec > 2,
+                prec >= 2,
                 left.pp(2).append(RcDoc::text(" ∨ ")).append(right.pp(2)),
             ),
             Type::Bottom => RcDoc::text("⊥"),
