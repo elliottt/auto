@@ -54,7 +54,7 @@ pub enum Rule {
     AndR,
     OrInjL,
     OrInjR,
-    OrL,
+    OrL { arg: Rc<Type> },
     ImpVarL { fun: Rc<Type>, arg: Rc<Type> },
     ImpAndL,
     ImpOrL,
@@ -71,7 +71,7 @@ impl Pretty for Rule {
             Rule::AndR => RcDoc::text("AND-R"),
             Rule::OrInjL => RcDoc::text("OR-INJ-L"),
             Rule::OrInjR => RcDoc::text("OR-INJ-R"),
-            Rule::OrL => RcDoc::text("OR-L"),
+            Rule::OrL { .. } => RcDoc::text("OR-L"),
             Rule::ImpVarL { .. } => RcDoc::text("IMP-VAR-L"),
             Rule::ImpAndL => RcDoc::text("IMP-AND-L"),
             Rule::ImpOrL => RcDoc::text("IMP-OR-L"),
@@ -104,7 +104,7 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                 return Some(Subgoal {
                     rule: Rule::Axiom { ty: assump.clone() },
                     goals: Vec::new(),
-                })
+                });
             }
         }
 
@@ -373,7 +373,7 @@ pub fn prove(goal: Rc<Sequent>) -> Option<Proof> {
                 let mut lassumps = Vec::with_capacity(goal.antecedent.len());
                 lassumps.push(left.clone());
                 lassumps.extend_from_slice(&goal.antecedent[0..ix]);
-                lassumps.extend_from_slice(&goal.antecedent[ix..]);
+                lassumps.extend_from_slice(&goal.antecedent[ix + 1..]);
                 let lproof = prove(Rc::new(Sequent {
                     antecedent: lassumps,
                     consequent: goal.consequent.clone(),
@@ -385,7 +385,7 @@ pub fn prove(goal: Rc<Sequent>) -> Option<Proof> {
                 let mut rassumps = Vec::with_capacity(goal.antecedent.len());
                 rassumps.push(right.clone());
                 rassumps.extend_from_slice(&goal.antecedent[0..ix]);
-                rassumps.extend_from_slice(&goal.antecedent[ix..]);
+                rassumps.extend_from_slice(&goal.antecedent[ix + 1..]);
                 let rproof = prove(Rc::new(Sequent {
                     antecedent: rassumps,
                     consequent: goal.consequent.clone(),
@@ -395,7 +395,9 @@ pub fn prove(goal: Rc<Sequent>) -> Option<Proof> {
                 }
 
                 return Some(Proof {
-                    rule: Rule::OrL,
+                    rule: Rule::OrL {
+                        arg: assump.clone(),
+                    },
                     premises: vec![lproof.unwrap(), rproof.unwrap()],
                     conclusion: goal,
                 });

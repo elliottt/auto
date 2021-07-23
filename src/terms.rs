@@ -8,8 +8,8 @@ use crate::types::Type;
 
 #[derive(Debug)]
 pub struct Binding {
-    pub lhs: Rc<Term>,
-    pub rhs: Rc<Term>,
+    pub lhs: Box<Term>,
+    pub rhs: Box<Term>,
 }
 
 impl Pretty for Binding {
@@ -28,26 +28,45 @@ impl fmt::Display for Binding {
 }
 
 #[derive(Debug)]
+pub struct MatchArm {
+    pub pat: Box<Term>,
+    pub body: Box<Term>,
+}
+
+impl Pretty for MatchArm {
+    fn pp(&self, _prec: usize) -> RcDoc {
+        self.pat
+            .pp(0)
+            .append(RcDoc::text(" -> "))
+            .append(self.body.pp(0).nest(2))
+    }
+}
+
+#[derive(Debug)]
 pub enum Term {
     Lambda {
         var: String,
         ty: Rc<Type>,
-        body: Rc<Term>,
+        body: Box<Term>,
     },
     App {
-        fun: Rc<Term>,
-        arg: Rc<Term>,
+        fun: Box<Term>,
+        arg: Box<Term>,
     },
     Var {
         var: String,
     },
     Tuple {
-        elems: Vec<Rc<Term>>,
+        elems: Vec<Box<Term>>,
     },
     Let {
-        lhs: Rc<Term>,
-        rhs: Rc<Term>,
-        body: Rc<Term>,
+        lhs: Box<Term>,
+        rhs: Box<Term>,
+        body: Box<Term>,
+    },
+    Match {
+        arg: Box<Term>,
+        arms: Vec<MatchArm>,
     },
 }
 
@@ -85,6 +104,20 @@ impl Pretty for Term {
                     .append(RcDoc::text(" in "))
                     .append(body.pp(0)),
             ),
+
+            Term::Match { arg, arms } => pretty::parens(
+                prec >= 5,
+                RcDoc::text("match ")
+                    .append(arg.pp(0))
+                    .append(RcDoc::space())
+                    .append(RcDoc::text("{"))
+                    .append(
+                        RcDoc::concat(arms.iter().map(|arm| RcDoc::line().append(arm.pp(0))))
+                            .nest(2),
+                    )
+                    .append(RcDoc::line())
+                    .append(RcDoc::text("}")),
+            ),
         }
     }
 }
@@ -96,9 +129,18 @@ impl fmt::Display for Term {
 }
 
 impl Term {
-    pub fn from_proof(proof: &Proof) -> Rc<Term> {
+    pub fn from_proof(proof: &Proof) -> Box<Term> {
         let mut env = Env::new();
         env.from_proof(proof)
+    }
+
+    pub fn constr(name: &str, arg: Box<Term>) -> Box<Term> {
+        Box::new(Term::App {
+            fun: Box::new(Term::Var {
+                var: String::from(name),
+            }),
+            arg,
+        })
     }
 }
 
@@ -141,14 +183,21 @@ impl Env {
         }
     }
 
-    fn from_proof(&mut self, proof: &Proof) -> Rc<Term> {
+    fn make_match_arm(&mut self, con: &str, proof: &Proof) -> MatchArm {
+        let arg = self.name(&proof.conclusion.antecedent[0]);
+        let pat = Term::constr(con, Box::new(Term::Var { var: arg }));
+        let body = self.from_proof(proof);
+        MatchArm { pat, body }
+    }
+
+    fn from_proof(&mut self, proof: &Proof) -> Box<Term> {
         match proof.rule {
             Rule::Axiom { ref ty } => {
                 let var = self.name(ty);
-                return Rc::new(Term::Var { var });
+                return Box::new(Term::Var { var });
             }
             Rule::ExFalso => {
-                return Rc::new(Term::Var {
+                return Box::new(Term::Var {
                     var: String::from("undefined"),
                 });
             }
@@ -159,7 +208,7 @@ impl Env {
                 let ty = &premise.conclusion.antecedent[0];
                 let var = self.name(&ty);
                 let body = self.from_proof(&premise);
-                return Rc::new(Term::Lambda {
+                return Box::new(Term::Lambda {
                     var,
                     ty: ty.clone(),
                     body,
@@ -167,20 +216,20 @@ impl Env {
             }
             Rule::AndL { ref ty } => {
                 let premise = &proof.premises[0];
-                let lhs = Rc::new(Term::Tuple {
+                let lhs = Box::new(Term::Tuple {
                     elems: vec![
-                        Rc::new(Term::Var {
+                        Box::new(Term::Var {
                             var: self.name(&premise.conclusion.antecedent[0]),
                         }),
-                        Rc::new(Term::Var {
+                        Box::new(Term::Var {
                             var: self.name(&premise.conclusion.antecedent[1]),
                         }),
                     ],
                 });
-                let rhs = Rc::new(Term::Var {
+                let rhs = Box::new(Term::Var {
                     var: self.name(&ty),
                 });
-                return Rc::new(Term::Let {
+                return Box::new(Term::Let {
                     lhs,
                     rhs,
                     body: self.from_proof(premise),
@@ -191,31 +240,44 @@ impl Env {
                     self.from_proof(&proof.premises[0]),
                     self.from_proof(&proof.premises[1]),
                 ];
-                return Rc::new(Term::Tuple { elems });
+                return Box::new(Term::Tuple { elems });
             }
             Rule::OrInjL => {
                 let premise = &proof.premises[0];
                 let arg = self.from_proof(&premise);
-                let fun = Rc::new(Term::Var {
+                let fun = Box::new(Term::Var {
                     var: String::from("Left"),
                 });
-                return Rc::new(Term::App { fun, arg });
+                return Box::new(Term::App { fun, arg });
             }
             Rule::OrInjR => {
                 let premise = &proof.premises[0];
                 let arg = self.from_proof(&premise);
-                let fun = Rc::new(Term::Var {
+                let fun = Box::new(Term::Var {
                     var: String::from("Right"),
                 });
-                return Rc::new(Term::App { fun, arg });
+                return Box::new(Term::App { fun, arg });
             }
-            Rule::OrL => {}
+            Rule::OrL { ref arg } => {
+                let var = Box::new(Term::Var {
+                    var: self.name(arg),
+                });
+                let lproof = &proof.premises[0];
+                let rproof = &proof.premises[1];
+                return Box::new(Term::Match {
+                    arg: var,
+                    arms: vec![
+                        self.make_match_arm("Left", lproof),
+                        self.make_match_arm("Right", rproof),
+                    ],
+                });
+            }
             Rule::ImpVarL { ref fun, ref arg } => {
-                return Rc::new(Term::App {
-                    fun: Rc::new(Term::Var {
+                return Box::new(Term::App {
+                    fun: Box::new(Term::Var {
                         var: self.name(fun),
                     }),
-                    arg: Rc::new(Term::Var {
+                    arg: Box::new(Term::Var {
                         var: self.name(arg),
                     }),
                 });
