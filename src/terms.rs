@@ -282,11 +282,19 @@ impl Env {
                     }),
                 });
             }
-            Rule::ImpAndL => {}
-            Rule::ImpOrL => {}
-            Rule::ImpImpL => {}
+            Rule::ImpAndL => {
+                println!("{}", proof);
+                panic!("ImpAndL")
+            }
+            Rule::ImpOrL => {
+                println!("{}", proof);
+                panic!("ImpOrL")
+            }
+            Rule::ImpImpL => {
+                println!("{}", proof);
+                panic!("ImpImpL")
+            }
         }
 
-        panic!("whoops")
     }
 }

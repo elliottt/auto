@@ -191,7 +191,8 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                 // ----------------
                 // A → B, A, Г => G
                 // ```
-                // TODO: should this consume the argument as well?
+                // NOTE: this doesn't need to consume the argument as removing the implication from
+                // the antecedent is enough to ensure that a loop doesn't occur.
                 if left.is_atomic() {
                     if let Some(arg) = goal.find_assumption(&left) {
                         let mut antecedent = Vec::with_capacity(goal.antecedent.len());
@@ -309,7 +310,8 @@ pub struct Proof {
 
 impl Pretty for Proof {
     fn pp(&self, _prec: usize) -> RcDoc {
-        RcDoc::concat(self.premises.iter().map(|proof| proof.pp(0)))
+        RcDoc::concat(self.premises.iter().map(|proof| proof.pp(0).nest(2)))
+            .append(RcDoc::line())
             .append(RcDoc::text("------------- ").append(self.rule.pp(0)))
             .append(RcDoc::line())
             .append(self.conclusion.pp(0))
