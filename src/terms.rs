@@ -27,7 +27,7 @@ impl fmt::Display for Binding {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MatchArm {
     pub pat: Box<Term>,
     pub body: Box<Term>,
@@ -42,7 +42,7 @@ impl Pretty for MatchArm {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Term {
     Lambda {
         var: String,
@@ -80,7 +80,7 @@ impl Pretty for Term {
                     .append(RcDoc::text(": "))
                     .append(ty.pp(0))
                     .append(RcDoc::text(". "))
-                    .append(body.pp(0)),
+                    .append(body.pp(0).nest(if body.is_lambda() { 0 } else { 2 })),
             ),
 
             Term::App { fun, arg } => pretty::parens(
@@ -102,6 +102,7 @@ impl Pretty for Term {
                     .append(RcDoc::text(" = "))
                     .append(rhs.pp(0))
                     .append(RcDoc::text(" in "))
+                    .append(RcDoc::line())
                     .append(body.pp(0)),
             ),
 
@@ -129,9 +130,17 @@ impl fmt::Display for Term {
 }
 
 impl Term {
+    pub fn is_lambda(&self) -> bool {
+        if let Term::Lambda { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn from_proof(proof: &Proof) -> Box<Term> {
         let mut env = Env::new();
-        env.from_proof(proof)
+        Term::simplify(env.from_proof(proof))
     }
 
     pub fn constr(name: &str, arg: Box<Term>) -> Box<Term> {
@@ -141,6 +150,65 @@ impl Term {
             }),
             arg,
         })
+    }
+
+    pub fn simplify(tm: Box<Term>) -> Box<Term> {
+        match *tm {
+            Term::Lambda { var, ty, body } => {
+                let body = Term::simplify(body);
+
+                if let Term::App {
+                    fun: body_fun,
+                    arg: body_arg,
+                } = body.as_ref()
+                {
+                    if let Term::Var { var: arg_var } = body_arg.as_ref() {
+                        if var.eq(arg_var) {
+                            // \x. f x ==> f
+                            return body_fun.clone();
+                        }
+                    }
+                }
+
+                Box::new(Term::Lambda { var, ty, body })
+            }
+            Term::App { fun, arg } => {
+                let fun = Term::simplify(fun);
+                let arg = Term::simplify(arg);
+
+                Box::new(Term::App { fun, arg })
+            }
+            Term::Var { .. } => tm,
+            Term::Tuple { elems } => Box::new(Term::Tuple {
+                elems: elems.into_iter().map(Term::simplify).collect(),
+            }),
+            Term::Let { lhs, rhs, body } => {
+                let lhs = Term::simplify(lhs);
+                let rhs = Term::simplify(rhs);
+                let body = Term::simplify(body);
+
+                if let Term::Var { var: lhs_name } = lhs.as_ref() {
+                    if let Term::Var { var: body_name} = body.as_ref() {
+                        if body_name.eq(lhs_name) {
+                            // let x = y in x ==> y
+                            return rhs;
+                        }
+                    }
+                }
+
+                Box::new(Term::Let { lhs, rhs, body })
+            }
+            Term::Match { arg, arms } => Box::new(Term::Match {
+                arg: Term::simplify(arg),
+                arms: arms
+                    .into_iter()
+                    .map(|arm| MatchArm {
+                        pat: Term::simplify(arm.pat),
+                        body: Term::simplify(arm.body),
+                    })
+                    .collect(),
+            }),
+        }
     }
 }
 
@@ -181,6 +249,10 @@ impl Env {
             self.vars.insert(ptr, name.clone());
             name
         }
+    }
+
+    fn var(&mut self, ty: &Rc<Type>) -> Box<Term> {
+        Box::new(Term::Var { var: self.name(ty) })
     }
 
     fn make_match_arm(&mut self, con: &str, proof: &Proof) -> MatchArm {
@@ -273,13 +345,15 @@ impl Env {
                 });
             }
             Rule::ImpVarL { ref fun, ref arg } => {
-                return Box::new(Term::App {
-                    fun: Box::new(Term::Var {
-                        var: self.name(fun),
-                    }),
-                    arg: Box::new(Term::Var {
-                        var: self.name(arg),
-                    }),
+                let premise = &proof.premises[0];
+                let lhs = self.var(&premise.conclusion.antecedent[0]);
+                let fun = self.var(fun);
+                let arg = self.var(arg);
+
+                return Box::new(Term::Let {
+                    lhs,
+                    rhs: Box::new(Term::App { fun, arg }),
+                    body: self.from_proof(&proof.premises[0]),
                 });
             }
             Rule::ImpAndL => {
@@ -290,11 +364,15 @@ impl Env {
                 println!("{}", proof);
                 panic!("ImpOrL")
             }
-            Rule::ImpImpL => {
-                println!("{}", proof);
-                panic!("ImpImpL")
+            Rule::ImpImpL { ref fun, .. } => {
+                let arg = &proof.premises[0];
+                return Box::new(Term::App {
+                    fun: Box::new(Term::Var {
+                        var: self.name(fun),
+                    }),
+                    arg: self.from_proof(arg),
+                });
             }
         }
-
     }
 }

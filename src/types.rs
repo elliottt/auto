@@ -68,12 +68,4 @@ impl Type {
     pub fn or(left: Rc<Self>, right: Rc<Self>) -> Self {
         Type::Or { left, right }
     }
-
-    pub fn bottom() -> Self {
-        Type::Bottom
-    }
-
-    pub fn not(ty: Rc<Self>) -> Self {
-        Self::imp(ty, Rc::new(Self::bottom()))
-    }
 }

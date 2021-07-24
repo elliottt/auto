@@ -39,10 +39,6 @@ impl Sequent {
     pub fn find_assumption(&self, ty: &Type) -> Option<&Rc<Type>> {
         self.antecedent.iter().find(|other| other.as_ref() == ty)
     }
-
-    pub fn has_assumption(&self, ty: &Type) -> bool {
-        self.find_assumption(ty).is_some()
-    }
 }
 
 #[derive(Debug)]
@@ -58,7 +54,7 @@ pub enum Rule {
     ImpVarL { fun: Rc<Type>, arg: Rc<Type> },
     ImpAndL,
     ImpOrL,
-    ImpImpL,
+    ImpImpL { fun: Rc<Type> },
 }
 
 impl Pretty for Rule {
@@ -75,7 +71,7 @@ impl Pretty for Rule {
             Rule::ImpVarL { .. } => RcDoc::text("IMP-VAR-L"),
             Rule::ImpAndL => RcDoc::text("IMP-AND-L"),
             Rule::ImpOrL => RcDoc::text("IMP-OR-L"),
-            Rule::ImpImpL => RcDoc::text("IMP-IMP-L"),
+            Rule::ImpImpL { .. } => RcDoc::text("IMP-IMP-L"),
         }
     }
 }
@@ -263,7 +259,7 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                 }
 
                 // ```
-                // B → C, Г => A → B  B, Г => G
+                // B → C, Г => A → B  C, Г => G
                 // ----------------------------
                 //      (A → B) → C, Г => G
                 // ```
@@ -279,7 +275,9 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                     rassumps.extend_from_slice(&goal.antecedent[ix + 1..]);
 
                     return Some(Subgoal {
-                        rule: Rule::ImpImpL,
+                        rule: Rule::ImpImpL {
+                            fun: assump.clone(),
+                        },
                         goals: vec![
                             Rc::new(Sequent {
                                 antecedent: lassumps,
