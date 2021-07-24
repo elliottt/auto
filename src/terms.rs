@@ -97,18 +97,19 @@ impl Pretty for Term {
 
             Term::Let { lhs, rhs, body } => pretty::parens(
                 prec >= 5,
-                RcDoc::text("let ")
+                RcDoc::line()
+                    .append(RcDoc::text("let "))
                     .append(lhs.pp(10))
                     .append(RcDoc::text(" = "))
                     .append(rhs.pp(0))
                     .append(RcDoc::text(" in "))
-                    .append(RcDoc::line())
                     .append(body.pp(0)),
             ),
 
             Term::Match { arg, arms } => pretty::parens(
                 prec >= 5,
-                RcDoc::text("match ")
+                RcDoc::line()
+                    .append(RcDoc::text("match "))
                     .append(arg.pp(0))
                     .append(RcDoc::space())
                     .append(RcDoc::text("{"))
