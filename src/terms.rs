@@ -152,6 +152,14 @@ impl Term {
         })
     }
 
+    pub fn app(fun: Box<Term>, arg: Box<Term>) -> Box<Term> {
+        Box::new(Term::App { fun, arg })
+    }
+
+    pub fn var(var: String) -> Box<Term> {
+        Box::new(Term::Var { var })
+    }
+
     pub fn simplify(tm: Box<Term>) -> Box<Term> {
         match *tm {
             Term::Lambda { var, ty, body } => {
@@ -188,7 +196,7 @@ impl Term {
                 let body = Term::simplify(body);
 
                 if let Term::Var { var: lhs_name } = lhs.as_ref() {
-                    if let Term::Var { var: body_name} = body.as_ref() {
+                    if let Term::Var { var: body_name } = body.as_ref() {
                         if body_name.eq(lhs_name) {
                             // let x = y in x ==> y
                             return rhs;
@@ -345,34 +353,89 @@ impl Env {
                 });
             }
             Rule::ImpVarL { ref fun, ref arg } => {
-                let premise = &proof.premises[0];
-                let lhs = self.var(&premise.conclusion.antecedent[0]);
+                let cont = &proof.premises[0];
+                let lhs = self.var(&cont.conclusion.antecedent[0]);
                 let fun = self.var(fun);
                 let arg = self.var(arg);
 
                 return Box::new(Term::Let {
                     lhs,
                     rhs: Box::new(Term::App { fun, arg }),
-                    body: self.from_proof(&proof.premises[0]),
+                    body: self.from_proof(cont),
                 });
             }
-            Rule::ImpAndL => {
-                println!("{}", proof);
-                panic!("ImpAndL")
+            Rule::ImpAndL { ref fun } => {
+                let cont = &proof.premises[0];
+                let curried = &cont.conclusion.antecedent[0];
+
+                let lhs = self.var(curried);
+                let rhs = self.lambda(curried, |env1, a, k| {
+                    env1.lambda(k, |env2, b, _| {
+                        Term::app(
+                            env2.var(fun),
+                            Box::new(Term::Tuple {
+                                elems: vec![Term::var(a.clone()), Term::var(b)],
+                            }),
+                        )
+                    })
+                });
+
+                return Box::new(Term::Let {
+                    lhs,
+                    rhs,
+                    body: self.from_proof(cont),
+                });
             }
-            Rule::ImpOrL => {
-                println!("{}", proof);
-                panic!("ImpOrL")
-            }
-            Rule::ImpImpL { ref fun, .. } => {
-                let arg = &proof.premises[0];
-                return Box::new(Term::App {
-                    fun: Box::new(Term::Var {
-                        var: self.name(fun),
+            Rule::ImpOrL { ref fun } => {
+                let cont = &proof.premises[0];
+                let lty = &cont.conclusion.antecedent[0];
+                let lfun = self.lambda(lty, |env, var, _| {
+                    Term::app(env.var(fun), Term::constr("Left", Term::var(var)))
+                });
+                let rty = &cont.conclusion.antecedent[1];
+                let rfun = self.lambda(rty, |env, var, _| {
+                    Term::app(env.var(fun), Term::constr("Right", Term::var(var)))
+                });
+
+                return Box::new(Term::Let {
+                    lhs: self.var(lty),
+                    rhs: lfun,
+                    body: Box::new(Term::Let {
+                        lhs: self.var(rty),
+                        rhs: rfun,
+                        body: self.from_proof(cont),
                     }),
-                    arg: self.from_proof(arg),
                 });
             }
+            Rule::ImpImpL { ref fun } => {
+                let cont = &proof.premises[1];
+                let lhs = self.var(&cont.conclusion.antecedent[0]);
+                let fun = self.var(fun);
+                let arg = self.from_proof(&proof.premises[0]);
+
+                return Box::new(Term::Let {
+                    lhs,
+                    rhs: Box::new(Term::App { fun, arg }),
+                    body: self.from_proof(cont),
+                });
+            }
+        }
+    }
+
+    pub fn lambda<MkBody>(&mut self, ty: &Type, mk_body: MkBody) -> Box<Term>
+    where
+        MkBody: FnOnce(&mut Self, String, &Type) -> Box<Term>,
+    {
+        if let Type::Imp { left, right } = ty {
+            let var = self.name(left);
+            let body = mk_body(self, var.clone(), right);
+            Box::new(Term::Lambda {
+                var,
+                ty: left.clone(),
+                body,
+            })
+        } else {
+            panic!("lambda: type given was not an Imp");
         }
     }
 }

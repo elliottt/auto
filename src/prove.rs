@@ -52,8 +52,8 @@ pub enum Rule {
     OrInjR,
     OrL { arg: Rc<Type> },
     ImpVarL { fun: Rc<Type>, arg: Rc<Type> },
-    ImpAndL,
-    ImpOrL,
+    ImpAndL { fun: Rc<Type> },
+    ImpOrL { fun: Rc<Type> },
     ImpImpL { fun: Rc<Type> },
 }
 
@@ -69,8 +69,8 @@ impl Pretty for Rule {
             Rule::OrInjR => RcDoc::text("OR-INJ-R"),
             Rule::OrL { .. } => RcDoc::text("OR-L"),
             Rule::ImpVarL { .. } => RcDoc::text("IMP-VAR-L"),
-            Rule::ImpAndL => RcDoc::text("IMP-AND-L"),
-            Rule::ImpOrL => RcDoc::text("IMP-OR-L"),
+            Rule::ImpAndL { .. } => RcDoc::text("IMP-AND-L"),
+            Rule::ImpOrL { .. } => RcDoc::text("IMP-OR-L"),
             Rule::ImpImpL { .. } => RcDoc::text("IMP-IMP-L"),
         }
     }
@@ -226,7 +226,7 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                     antecedent.extend_from_slice(&goal.antecedent[0..ix]);
                     antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
                     return Some(Subgoal {
-                        rule: Rule::ImpAndL,
+                        rule: Rule::ImpAndL { fun: assump.clone() },
                         goals: vec![Rc::new(Sequent {
                             antecedent,
                             consequent: goal.consequent.clone(),
@@ -250,7 +250,9 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                     antecedent.extend_from_slice(&goal.antecedent[0..ix]);
                     antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
                     return Some(Subgoal {
-                        rule: Rule::ImpOrL,
+                        rule: Rule::ImpOrL {
+                            fun: assump.clone(),
+                        },
                         goals: vec![Rc::new(Sequent {
                             antecedent,
                             consequent: goal.consequent.clone(),
