@@ -48,8 +48,7 @@ pub enum Rule {
     ImpR,
     AndL { ty: Rc<Type> },
     AndR,
-    OrInjL,
-    OrInjR,
+    OrInj { ix: usize },
     OrL { arg: Rc<Type> },
     ImpVarL { fun: Rc<Type>, arg: Rc<Type> },
     ImpAndL { fun: Rc<Type> },
@@ -65,8 +64,7 @@ impl Pretty for Rule {
             Rule::ImpR => RcDoc::text("IMP-R"),
             Rule::AndL { .. } => RcDoc::text("AND-L"),
             Rule::AndR => RcDoc::text("AND-R"),
-            Rule::OrInjL => RcDoc::text("OR-INJ-L"),
-            Rule::OrInjR => RcDoc::text("OR-INJ-R"),
+            Rule::OrInj { ix } => RcDoc::text(format!("OR-INJ-{}", ix)),
             Rule::OrL { .. } => RcDoc::text("OR-L"),
             Rule::ImpVarL { .. } => RcDoc::text("IMP-VAR-L"),
             Rule::ImpAndL { .. } => RcDoc::text("IMP-AND-L"),
@@ -226,7 +224,9 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                     antecedent.extend_from_slice(&goal.antecedent[0..ix]);
                     antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
                     return Some(Subgoal {
-                        rule: Rule::ImpAndL { fun: assump.clone() },
+                        rule: Rule::ImpAndL {
+                            fun: assump.clone(),
+                        },
                         goals: vec![Rc::new(Sequent {
                             antecedent,
                             consequent: goal.consequent.clone(),
@@ -239,14 +239,12 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                 // --------------------
                 // (A ∨ B) → C, Г => G
                 // ```
-                if let Type::Or {
-                    left: ol,
-                    right: or,
-                } = left.as_ref()
-                {
-                    let mut antecedent = Vec::with_capacity(goal.antecedent.len() + 1);
-                    antecedent.push(Rc::new(Type::imp(ol.clone(), right.clone())));
-                    antecedent.push(Rc::new(Type::imp(or.clone(), right.clone())));
+                if let Type::Or { cases } = left.as_ref() {
+                    let mut antecedent =
+                        Vec::with_capacity(goal.antecedent.len() + cases.len() - 1);
+                    for case in cases.iter() {
+                        antecedent.push(Rc::new(Type::imp(Rc::clone(case), Rc::clone(right))));
+                    }
                     antecedent.extend_from_slice(&goal.antecedent[0..ix]);
                     antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
                     return Some(Subgoal {
@@ -342,57 +340,46 @@ pub fn prove(goal: Rc<Sequent>) -> Option<Proof> {
     }
 
     // try proving the branches of an or
-    if let Type::Or { left, right } = goal.consequent.as_ref() {
-        let lgoal = Rc::new(Sequent {
-            antecedent: goal.antecedent.clone(),
-            consequent: left.clone(),
-        });
-        if let Some(lproof) = prove(lgoal) {
-            return Some(Proof {
-                rule: Rule::OrInjL,
-                premises: vec![lproof],
-                conclusion: goal,
-            });
-        }
-
-        let rgoal = Rc::new(Sequent {
-            antecedent: goal.antecedent.clone(),
-            consequent: right.clone(),
-        });
-        if let Some(rproof) = prove(rgoal) {
-            return Some(Proof {
-                rule: Rule::OrInjR,
-                premises: vec![rproof],
-                conclusion: goal,
-            });
+    if let Type::Or { cases } = goal.consequent.as_ref() {
+        for (ix, case) in cases.iter().enumerate() {
+            if let Some(lproof) = prove(Rc::new(Sequent {
+                antecedent: goal.antecedent.clone(),
+                consequent: Rc::clone(case),
+            })) {
+                return Some(Proof {
+                    rule: Rule::OrInj { ix },
+                    premises: vec![lproof],
+                    conclusion: goal,
+                });
+            }
         }
     }
 
     for (ix, assump) in goal.antecedent.iter().enumerate() {
         match assump.as_ref() {
             // try proving the goal in terms of an or in the environment
-            Type::Or { left, right } => {
-                let mut lassumps = Vec::with_capacity(goal.antecedent.len());
-                lassumps.push(left.clone());
-                lassumps.extend_from_slice(&goal.antecedent[0..ix]);
-                lassumps.extend_from_slice(&goal.antecedent[ix + 1..]);
-                let lproof = prove(Rc::new(Sequent {
-                    antecedent: lassumps,
-                    consequent: goal.consequent.clone(),
-                }));
-                if lproof.is_none() {
-                    continue;
+            Type::Or { cases } => {
+                let lassumps = &goal.antecedent[0..ix];
+                let rassumps = &goal.antecedent[ix + 1..];
+
+                let mut premises = Vec::with_capacity(cases.len());
+                for case in cases.iter() {
+                    let mut antecedent = Vec::with_capacity(goal.antecedent.len());
+                    antecedent.push(Rc::clone(case));
+                    antecedent.extend_from_slice(lassumps);
+                    antecedent.extend_from_slice(rassumps);
+
+                    if let Some(proof) = prove(Rc::new(Sequent {
+                        antecedent,
+                        consequent: Rc::clone(&goal.consequent),
+                    })) {
+                        premises.push(proof);
+                    } else {
+                        break;
+                    }
                 }
 
-                let mut rassumps = Vec::with_capacity(goal.antecedent.len());
-                rassumps.push(right.clone());
-                rassumps.extend_from_slice(&goal.antecedent[0..ix]);
-                rassumps.extend_from_slice(&goal.antecedent[ix + 1..]);
-                let rproof = prove(Rc::new(Sequent {
-                    antecedent: rassumps,
-                    consequent: goal.consequent.clone(),
-                }));
-                if rproof.is_none() {
+                if premises.len() != cases.len() {
                     continue;
                 }
 
@@ -400,7 +387,7 @@ pub fn prove(goal: Rc<Sequent>) -> Option<Proof> {
                     rule: Rule::OrL {
                         arg: assump.clone(),
                     },
-                    premises: vec![lproof.unwrap(), rproof.unwrap()],
+                    premises,
                     conclusion: goal,
                 });
             }

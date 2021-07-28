@@ -44,7 +44,7 @@ fn parse_value(pair: Pair<Rule>) -> Rc<Type> {
             let mut pairs = pair.into_inner();
             let lhs = parse_value(pairs.next().unwrap());
             if let Some(rhs) = pairs.next() {
-                return Rc::new(Type::or(lhs, parse_value(rhs)));
+                return Rc::new(Type::or([lhs, parse_value(rhs)]));
             } else {
                 return lhs;
             }

@@ -25,7 +25,8 @@ fn derive(args: HashMap<String, Value>, _env: &mut Env) -> Result<Option<String>
     let ty = parser::parse_type(&ty_str);
 
     if let Some(proof) = prove(Rc::new(Sequent::from_type(ty.clone()))) {
-        println!("{}", Term::from_proof(&proof));
+        let term = Term::from_proof(&proof);
+        println!("{}", term);
     } else {
         println!("Unable to prove: {}", ty);
     }

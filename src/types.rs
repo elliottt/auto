@@ -11,7 +11,7 @@ pub enum Type {
 
     And { left: Rc<Type>, right: Rc<Type> },
 
-    Or { left: Rc<Type>, right: Rc<Type> },
+    Or { cases: Vec<Rc<Type>> },
 
     Bottom,
 }
@@ -28,9 +28,9 @@ impl pretty::Pretty for Type {
                 prec >= 3,
                 left.pp(3).append(RcDoc::text(" ∧ ")).append(right.pp(3)),
             ),
-            Type::Or { left, right } => pretty::parens(
+            Type::Or { cases } => pretty::parens(
                 prec >= 2,
-                left.pp(2).append(RcDoc::text(" ∨ ")).append(right.pp(2)),
+                RcDoc::intersperse(cases.iter().map(|case| case.pp(0)), RcDoc::text(" ∨ ")),
             ),
             Type::Bottom => RcDoc::text("⊥"),
         }
@@ -65,7 +65,10 @@ impl Type {
         Type::And { left, right }
     }
 
-    pub fn or(left: Rc<Self>, right: Rc<Self>) -> Self {
-        Type::Or { left, right }
+    pub fn or<Cases>(cases: Cases) -> Self
+    where
+        Cases: IntoIterator<Item = Rc<Self>>,
+    {
+        Type::Or { cases: cases.into_iter().collect() }
     }
 }

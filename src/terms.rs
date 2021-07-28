@@ -323,21 +323,11 @@ impl Env {
                 ];
                 return Box::new(Term::Tuple { elems });
             }
-            Rule::OrInjL => {
-                let premise = &proof.premises[0];
-                let arg = self.from_proof(&premise);
-                let fun = Box::new(Term::Var {
-                    var: String::from("Left"),
-                });
-                return Box::new(Term::App { fun, arg });
-            }
-            Rule::OrInjR => {
-                let premise = &proof.premises[0];
-                let arg = self.from_proof(&premise);
-                let fun = Box::new(Term::Var {
-                    var: String::from("Right"),
-                });
-                return Box::new(Term::App { fun, arg });
+            Rule::OrInj { ix } => {
+                let cons = ["Left", "Right"];
+                let arg = self.from_proof(&proof.premises[0]);
+                let fun = Term::var(String::from(cons[ix]));
+                return Term::app(fun, arg);
             }
             Rule::OrL { ref arg } => {
                 let var = Box::new(Term::Var {
@@ -388,25 +378,23 @@ impl Env {
                 });
             }
             Rule::ImpOrL { ref fun } => {
-                let cont = &proof.premises[0];
-                let lty = &cont.conclusion.antecedent[0];
-                let lfun = self.lambda(lty, |env, var, _| {
-                    Term::app(env.var(fun), Term::constr("Left", Term::var(var)))
-                });
-                let rty = &cont.conclusion.antecedent[1];
-                let rfun = self.lambda(rty, |env, var, _| {
-                    Term::app(env.var(fun), Term::constr("Right", Term::var(var)))
-                });
+                let cons = ["Left", "Right"];
 
-                return Box::new(Term::Let {
-                    lhs: self.var(lty),
-                    rhs: lfun,
-                    body: Box::new(Term::Let {
-                        lhs: self.var(rty),
-                        rhs: rfun,
-                        body: self.from_proof(cont),
-                    }),
-                });
+                let cont = &proof.premises[0];
+                let mut expr = self.from_proof(cont);
+
+                for (ix, ty) in cont.conclusion.antecedent.iter().enumerate() {
+                    let case_fun = self.lambda(ty, |env, var, _| {
+                        Term::app(env.var(fun), Term::constr(cons[ix], Term::var(var)))
+                    });
+                    expr = Box::new(Term::Let {
+                        lhs: self.var(ty),
+                        rhs: case_fun,
+                        body: expr,
+                    });
+                }
+
+                return expr;
             }
             Rule::ImpImpL { ref fun } => {
                 let cont = &proof.premises[1];
