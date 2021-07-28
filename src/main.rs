@@ -16,7 +16,11 @@ mod types;
 use prove::{prove, Sequent};
 use terms::Term;
 
-fn derive<T>(args: HashMap<String, Value>, _: &mut T) -> Result<Option<String>> {
+#[derive(Default)]
+struct Env {
+}
+
+fn derive(args: HashMap<String, Value>, _env: &mut Env) -> Result<Option<String>> {
     let ty_str: String = args["type"].convert()?;
     let ty = parser::parse_type(&ty_str);
 
@@ -30,7 +34,7 @@ fn derive<T>(args: HashMap<String, Value>, _: &mut T) -> Result<Option<String>> 
 }
 
 fn main() -> Result<()> {
-    let mut repl = Repl::new(()).with_name("auto").add_command(
+    let mut repl = Repl::new(Env::default()).with_name("auto").add_command(
         Command::new("?", derive)
             .with_parameter(Parameter::new("type").set_required(true)?)?
             .with_help("Derive a term from a type"),
