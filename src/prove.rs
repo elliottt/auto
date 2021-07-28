@@ -46,7 +46,7 @@ pub enum Rule {
     Axiom { ty: Rc<Type> },
     ExFalso,
     ImpR,
-    AndL { ty: Rc<Type> },
+    AndL { size: usize, ty: Rc<Type> },
     AndR,
     OrInj { ix: usize },
     OrL { arg: Rc<Type> },
@@ -125,19 +125,18 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
         // --------------
         //   Г => A ∧ B
         // ```
-        Type::And { left, right } => {
+        Type::And { args } => {
             return Some(Subgoal {
                 rule: Rule::AndR,
-                goals: vec![
-                    Rc::new(Sequent {
-                        antecedent: goal.antecedent.clone(),
-                        consequent: left.clone(),
-                    }),
-                    Rc::new(Sequent {
-                        antecedent: goal.antecedent.clone(),
-                        consequent: right.clone(),
-                    }),
-                ],
+                goals: args
+                    .iter()
+                    .map(|arg| {
+                        Rc::new(Sequent {
+                            antecedent: goal.antecedent.clone(),
+                            consequent: arg.clone(),
+                        })
+                    })
+                    .collect(),
             })
         }
 
@@ -164,14 +163,18 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
             // ```
             //
             // TODO: is it necessary to consume the `A ∧ B` fact?
-            Type::And { left, right } => {
-                let mut antecedent = Vec::with_capacity(goal.antecedent.len() + 1);
-                antecedent.push(left.clone());
-                antecedent.push(right.clone());
+            Type::And { args } => {
+                let mut antecedent = Vec::with_capacity(goal.antecedent.len() + args.len() - 1);
+
+                for arg in args.iter() {
+                    antecedent.push(arg.clone())
+                }
+
                 antecedent.extend_from_slice(&goal.antecedent[0..ix]);
                 antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
+
                 return Some(Subgoal {
-                    rule: Rule::AndL { ty: assump.clone() },
+                    rule: Rule::AndL { size: args.len(), ty: assump.clone() },
                     goals: vec![Rc::new(Sequent {
                         antecedent,
                         consequent: goal.consequent.clone(),
@@ -211,16 +214,15 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                 // -------------------
                 // (A ∧ B) → B, Г => G
                 // ```
-                if let Type::And {
-                    left: al,
-                    right: ar,
-                } = left.as_ref()
-                {
+                if let Type::And { args } = left.as_ref() {
+                    let mut ty = right.clone();
+
+                    for arg in args.iter().rev() {
+                        ty = Rc::new(Type::imp(arg.clone(), ty));
+                    }
+
                     let mut antecedent = Vec::with_capacity(goal.antecedent.len());
-                    antecedent.push(Rc::new(Type::imp(
-                        al.clone(),
-                        Rc::new(Type::imp(ar.clone(), right.clone())),
-                    )));
+                    antecedent.push(ty);
                     antecedent.extend_from_slice(&goal.antecedent[0..ix]);
                     antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
                     return Some(Subgoal {

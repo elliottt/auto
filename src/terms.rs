@@ -295,17 +295,16 @@ impl Env {
                     body,
                 });
             }
-            Rule::AndL { ref ty } => {
+            Rule::AndL { size, ref ty } => {
                 let premise = &proof.premises[0];
                 let lhs = Box::new(Term::Tuple {
-                    elems: vec![
-                        Box::new(Term::Var {
-                            var: self.name(&premise.conclusion.antecedent[0]),
-                        }),
-                        Box::new(Term::Var {
-                            var: self.name(&premise.conclusion.antecedent[1]),
-                        }),
-                    ],
+                    elems: premise
+                        .conclusion
+                        .antecedent
+                        .iter()
+                        .take(size)
+                        .map(|arg| self.var(arg))
+                        .collect(),
                 });
                 let rhs = Box::new(Term::Var {
                     var: self.name(&ty),
@@ -317,10 +316,11 @@ impl Env {
                 });
             }
             Rule::AndR => {
-                let elems = vec![
-                    self.from_proof(&proof.premises[0]),
-                    self.from_proof(&proof.premises[1]),
-                ];
+                let elems = proof
+                    .premises
+                    .iter()
+                    .map(|premise| self.from_proof(premise))
+                    .collect();
                 return Box::new(Term::Tuple { elems });
             }
             Rule::OrInj { ix } => {

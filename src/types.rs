@@ -9,7 +9,7 @@ pub enum Type {
 
     Imp { left: Rc<Type>, right: Rc<Type> },
 
-    And { left: Rc<Type>, right: Rc<Type> },
+    And { args: Vec<Rc<Type>> },
 
     Or { cases: Vec<Rc<Type>> },
 
@@ -24,13 +24,13 @@ impl pretty::Pretty for Type {
                 prec >= 1,
                 left.pp(1).append(RcDoc::text(" → ")).append(right.pp(0)),
             ),
-            Type::And { left, right } => pretty::parens(
+            Type::And { args } => pretty::parens(
                 prec >= 3,
-                left.pp(3).append(RcDoc::text(" ∧ ")).append(right.pp(3)),
+                RcDoc::intersperse(args.iter().map(|arg| arg.pp(3)), RcDoc::text(" ∧ ")),
             ),
             Type::Or { cases } => pretty::parens(
                 prec >= 2,
-                RcDoc::intersperse(cases.iter().map(|case| case.pp(0)), RcDoc::text(" ∨ ")),
+                RcDoc::intersperse(cases.iter().map(|case| case.pp(2)), RcDoc::text(" ∨ ")),
             ),
             Type::Bottom => RcDoc::text("⊥"),
         }
@@ -61,14 +61,21 @@ impl Type {
         Type::Imp { left, right }
     }
 
-    pub fn and(left: Rc<Self>, right: Rc<Self>) -> Self {
-        Type::And { left, right }
+    pub fn and<Args>(args: Args) -> Self
+    where
+        Args: IntoIterator<Item = Rc<Self>>,
+    {
+        Type::And {
+            args: args.into_iter().collect(),
+        }
     }
 
     pub fn or<Cases>(cases: Cases) -> Self
     where
         Cases: IntoIterator<Item = Rc<Self>>,
     {
-        Type::Or { cases: cases.into_iter().collect() }
+        Type::Or {
+            cases: cases.into_iter().collect(),
+        }
     }
 }
