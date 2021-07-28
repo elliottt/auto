@@ -55,7 +55,7 @@ fn parse_value(pair: Pair<Rule>) -> Rc<Type> {
             return parse_value(pairs.next().unwrap());
         }
 
-        Rule::atom => return Rc::new(Type::var(pair.as_str())),
+        Rule::atom => return Rc::new(Type::atom(pair.as_str())),
 
         Rule::bottom => return Rc::new(Type::Bottom),
 

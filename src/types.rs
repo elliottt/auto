@@ -5,7 +5,7 @@ use crate::pretty::{self, Pretty, RcDoc};
 
 #[derive(Debug, Hash, PartialEq, Eq)]
 pub enum Type {
-    Var { name: String },
+    Atom { name: String },
 
     Imp { left: Rc<Type>, right: Rc<Type> },
 
@@ -19,7 +19,7 @@ pub enum Type {
 impl pretty::Pretty for Type {
     fn pp(&self, prec: usize) -> RcDoc {
         match self {
-            Type::Var { name } => name.pp(0),
+            Type::Atom { name } => name.pp(0),
             Type::Imp { left, right } => pretty::parens(
                 prec >= 1,
                 left.pp(1).append(RcDoc::text(" → ")).append(right.pp(0)),
@@ -46,13 +46,13 @@ impl fmt::Display for Type {
 impl Type {
     pub fn is_atomic(&self) -> bool {
         match self {
-            Type::Var { .. } => true,
+            Type::Atom { .. } => true,
             _ => false,
         }
     }
 
-    pub fn var(name: &str) -> Self {
-        Type::Var {
+    pub fn atom(name: &str) -> Self {
+        Type::Atom {
             name: name.to_string(),
         }
     }

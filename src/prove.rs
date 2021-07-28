@@ -95,7 +95,7 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
         // ----------
         // A , Г => A
         // ```
-        Type::Var { .. } => {
+        Type::Atom { .. } => {
             if let Some(assump) = goal.find_assumption(goal.consequent.as_ref()) {
                 return Some(Subgoal {
                     rule: Rule::Axiom { ty: assump.clone() },
