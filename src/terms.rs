@@ -141,7 +141,7 @@ impl Term {
 
     pub fn from_proof(proof: &Proof) -> Box<Term> {
         let mut env = Env::new();
-        Term::simplify(env.from_proof(proof))
+        env.from_proof(proof)
     }
 
     pub fn constr(name: &str, arg: Box<Term>) -> Box<Term> {
