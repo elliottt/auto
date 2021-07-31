@@ -45,6 +45,7 @@ dependencies = [
  "pest_derive",
  "pretty",
  "repl-rs",
+ "repl_framework",
 ]
 
 [[package]]
@@ -426,6 +427,12 @@ dependencies = [
  "rustyline",
  "yansi",
 ]
+
+[[package]]
+name = "repl_framework"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c0e052a410532dee817b6e2347b0057ae7c283d8f3726790c9c18bfcfc099ab"
 
 [[package]]
 name = "rustyline"
