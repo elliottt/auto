@@ -12,14 +12,10 @@ pub struct Data {
 
 impl Data {
     pub fn as_type(&self) -> Rc<Type> {
-        let mut res = Rc::new(Type::atom(&self.name));
-
-        for var in self.vars.iter() {
-            // TODO: should vars be atoms? does it matter?
-            res = Rc::new(Type::app(res, Rc::new(Type::atom(var))))
-        }
-
-        res
+        Type::app(
+            Rc::new(Type::atom(&self.name)),
+            self.vars.iter().map(|var| Rc::new(Type::atom(var))),
+        )
     }
 }
 
@@ -36,17 +32,14 @@ impl pretty::Pretty for Data {
 
         if !self.constrs.is_empty() {
             doc = doc.append(
-                RcDoc::concat(
-                    self.constrs
-                        .iter()
-                        .map(|(name, ty)|
-                             RcDoc::line()
-                             .append(RcDoc::text(name))
-                             .append(RcDoc::space())
-                             .append(RcDoc::text("::"))
-                             .append(RcDoc::space())
-                             .append(ty.pp(0))),
-                )
+                RcDoc::concat(self.constrs.iter().map(|(name, ty)| {
+                    RcDoc::line()
+                        .append(RcDoc::text(name))
+                        .append(RcDoc::space())
+                        .append(RcDoc::text("::"))
+                        .append(RcDoc::space())
+                        .append(ty.pp(0))
+                }))
                 .nest(2),
             )
         }
@@ -67,7 +60,7 @@ pub enum Type {
 
     Imp { left: Rc<Type>, right: Rc<Type> },
 
-    App { left: Rc<Type>, right: Rc<Type> },
+    App { fun: Rc<Type>, args: Vec<Rc<Type>> },
 
     And { args: Vec<Rc<Type>> },
 
@@ -84,9 +77,12 @@ impl pretty::Pretty for Type {
                 prec >= 1,
                 left.pp(1).append(RcDoc::text(" → ")).append(right.pp(0)),
             ),
-            Type::App { left, right } => pretty::parens(
+            Type::App { fun, args } => pretty::parens(
                 prec >= 1,
-                left.pp(0).append(RcDoc::space()).append(right.pp(1)),
+                fun.pp(0).append(RcDoc::space()).append(RcDoc::intersperse(
+                    args.iter().map(|arg| arg.pp(1)),
+                    RcDoc::space(),
+                )),
             ),
             Type::And { args } => pretty::parens(
                 prec >= 3,
@@ -115,8 +111,16 @@ impl Type {
         }
     }
 
-    pub fn app(left: Rc<Self>, right: Rc<Self>) -> Self {
-        Type::App { left, right }
+    pub fn app<Args>(fun: Rc<Type>, mut args: Args) -> Rc<Self>
+    where
+        Args: IntoIterator<Item = Rc<Self>>,
+    {
+        let args: Vec<Rc<Self>> = args.into_iter().collect();
+        if args.is_empty() {
+            fun
+        } else {
+            Rc::new(Type::App { fun, args })
+        }
     }
 
     pub fn atom(name: &str) -> Self {

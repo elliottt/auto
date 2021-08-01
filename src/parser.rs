@@ -47,6 +47,12 @@ pub fn parse_type(input: &str) -> Rc<Type> {
                 }
             }
 
+            Rule::app => {
+                let mut iter = pair.into_inner();
+                let fun = parse_value(iter.next().unwrap());
+                return Type::app(fun, iter.map(parse_value));
+            }
+
             Rule::atomic => {
                 let mut pairs = pair.into_inner();
                 return parse_value(pairs.next().unwrap());
@@ -54,7 +60,7 @@ pub fn parse_type(input: &str) -> Rc<Type> {
 
             Rule::atom => return Rc::new(Type::atom(pair.as_str())),
 
-            // TODO: bad
+            // TODO: bad?
             Rule::var => return Rc::new(Type::atom(pair.as_str())),
 
             Rule::bottom => return Rc::new(Type::Bottom),
