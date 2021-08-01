@@ -13,8 +13,8 @@ pub struct Data {
 impl Data {
     pub fn as_type(&self) -> Rc<Type> {
         Type::app(
-            Rc::new(Type::atom(&self.name)),
-            self.vars.iter().map(|var| Rc::new(Type::atom(var))),
+            Type::atom(&self.name),
+            self.vars.iter().map(|var| Type::atom(var)),
         )
     }
 }
@@ -111,7 +111,7 @@ impl Type {
         }
     }
 
-    pub fn app<Args>(fun: Rc<Type>, mut args: Args) -> Rc<Self>
+    pub fn app<Args>(fun: Rc<Type>, args: Args) -> Rc<Self>
     where
         Args: IntoIterator<Item = Rc<Self>>,
     {
@@ -123,31 +123,41 @@ impl Type {
         }
     }
 
-    pub fn atom(name: &str) -> Self {
-        Type::Atom {
-            name: name.to_string(),
-        }
+    pub fn atom(name: &str) -> Rc<Self> {
+        Rc::new(Type::Atom {
+            name: String::from(name),
+        })
     }
 
-    pub fn imp(left: Rc<Self>, right: Rc<Self>) -> Self {
-        Type::Imp { left, right }
+    pub fn imp(left: Rc<Self>, right: Rc<Self>) -> Rc<Self> {
+        Rc::new(Type::Imp { left, right })
     }
 
-    pub fn and<Args>(args: Args) -> Self
+    pub fn and<Args>(args: Args) -> Rc<Self>
     where
         Args: IntoIterator<Item = Rc<Self>>,
     {
-        Type::And {
-            args: args.into_iter().collect(),
+        let args: Vec<Rc<Self>> = args.into_iter().collect();
+        if args.len() == 1 {
+            Rc::clone(&args[0])
+        } else {
+            Rc::new(Type::And { args })
         }
     }
 
-    pub fn or<Cases>(cases: Cases) -> Self
+    pub fn or<Cases>(cases: Cases) -> Rc<Self>
     where
         Cases: IntoIterator<Item = Rc<Self>>,
     {
-        Type::Or {
-            cases: cases.into_iter().collect(),
+        let cases: Vec<Rc<Self>> = cases.into_iter().collect();
+        if cases.len() == 1 {
+            Rc::clone(&cases[0])
+        } else {
+            Rc::new(Type::Or { cases })
         }
+    }
+
+    pub fn bottom() -> Rc<Self> {
+        Rc::new(Type::Bottom)
     }
 }

@@ -21,7 +21,7 @@ pub fn parse_type(input: &str) -> Rc<Type> {
                 let mut pairs = pair.into_inner();
                 let lhs = parse_value(pairs.next().unwrap());
                 if let Some(rhs) = pairs.next() {
-                    return Rc::new(Type::imp(lhs, parse_value(rhs)));
+                    return Type::imp(lhs, parse_value(rhs));
                 } else {
                     return lhs;
                 }
@@ -31,7 +31,7 @@ pub fn parse_type(input: &str) -> Rc<Type> {
                 let mut pairs = pair.into_inner();
                 let lhs = parse_value(pairs.next().unwrap());
                 if let Some(rhs) = pairs.next() {
-                    return Rc::new(Type::and([lhs, parse_value(rhs)]));
+                    return Type::and([lhs, parse_value(rhs)]);
                 } else {
                     return lhs;
                 }
@@ -41,7 +41,7 @@ pub fn parse_type(input: &str) -> Rc<Type> {
                 let mut pairs = pair.into_inner();
                 let lhs = parse_value(pairs.next().unwrap());
                 if let Some(rhs) = pairs.next() {
-                    return Rc::new(Type::or([lhs, parse_value(rhs)]));
+                    return Type::or([lhs, parse_value(rhs)]);
                 } else {
                     return lhs;
                 }
@@ -58,16 +58,16 @@ pub fn parse_type(input: &str) -> Rc<Type> {
                 return parse_value(pairs.next().unwrap());
             }
 
-            Rule::atom => return Rc::new(Type::atom(pair.as_str())),
+            Rule::atom => return Type::atom(pair.as_str()),
 
             // TODO: bad?
-            Rule::var => return Rc::new(Type::atom(pair.as_str())),
+            Rule::var => return Type::atom(pair.as_str()),
 
-            Rule::bottom => return Rc::new(Type::Bottom),
+            Rule::bottom => return Type::bottom(),
 
             _ => {
                 println!("UNHANDLED: {:?}", pair);
-                return Rc::new(Type::Bottom);
+                return Type::bottom();
             }
         }
     }
@@ -104,7 +104,7 @@ pub fn parse_data(input: &str) -> Data {
 
                     if let Some(constrs) = iter.next() {
                         for ty in constrs.into_inner().rev() {
-                            res = Rc::new(Type::imp(parse_type(ty.as_str()), res));
+                            res = Type::imp(parse_type(ty.as_str()), res);
                         }
                     }
 

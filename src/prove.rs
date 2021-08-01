@@ -218,7 +218,7 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                     let mut ty = right.clone();
 
                     for arg in args.iter().rev() {
-                        ty = Rc::new(Type::imp(arg.clone(), ty));
+                        ty = Type::imp(arg.clone(), ty);
                     }
 
                     let mut antecedent = Vec::with_capacity(goal.antecedent.len());
@@ -245,7 +245,7 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                     let mut antecedent =
                         Vec::with_capacity(goal.antecedent.len() + cases.len() - 1);
                     for case in cases.iter() {
-                        antecedent.push(Rc::new(Type::imp(Rc::clone(case), Rc::clone(right))));
+                        antecedent.push(Type::imp(Rc::clone(case), Rc::clone(right)));
                     }
                     antecedent.extend_from_slice(&goal.antecedent[0..ix]);
                     antecedent.extend_from_slice(&goal.antecedent[ix + 1..]);
@@ -267,7 +267,7 @@ fn try_simple(goal: Rc<Sequent>) -> Option<Subgoal> {
                 // ```
                 if let Type::Imp { right: ir, .. } = left.as_ref() {
                     let mut lassumps = Vec::with_capacity(goal.antecedent.len());
-                    lassumps.push(Rc::new(Type::imp(ir.clone(), right.clone())));
+                    lassumps.push(Type::imp(ir.clone(), right.clone()));
                     lassumps.extend_from_slice(&goal.antecedent[0..ix]);
                     lassumps.extend_from_slice(&goal.antecedent[ix + 1..]);
 
