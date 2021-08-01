@@ -3,6 +3,13 @@ use std::rc::Rc;
 
 use crate::pretty::{self, Pretty, RcDoc};
 
+#[derive(Debug, Default)]
+pub struct Data {
+    pub name: String,
+    pub vars: Vec<String>,
+    pub constrs: Vec<Rc<Type>>,
+}
+
 #[derive(Debug, Hash, PartialEq, Eq)]
 pub enum Type {
     Atom { name: String },

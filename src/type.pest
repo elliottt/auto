@@ -1,8 +1,11 @@
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
-atom = @{ LETTER ~ (LETTER | NUMBER | "_" | "'")* }
+atom = @{ UPPERCASE_LETTER ~ (LETTER | NUMBER | "_" | "'")* }
+var = @{ LOWERCASE_LETTER ~ (LETTER | NUMBER | "_" | "'")* }
 bottom = @{ "_|_" }
+
+app = { atom ~ atomic* }
 
 iexp = { aexp ~ ( "->" ~ iexp )?  }
 aexp = { oexp ~ ( "/\\" ~ aexp )?  }
@@ -10,3 +13,15 @@ oexp = { atomic ~ ( "\\/" ~ oexp )?  }
 atomic = { atom | bottom | ( "(" ~ iexp ~ ")" ) }
 
 type_ = { SOI ~ iexp ~ EOI }
+
+data = {
+  SOI
+  ~ atom
+  ~ vars
+  ~ ("=" ~ constrs)?
+  ~ EOI
+}
+
+vars = { var* }
+
+constrs = { app ~ ("|" ~ constrs)? }

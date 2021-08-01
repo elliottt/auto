@@ -53,11 +53,20 @@ fn prove_cmd(_env: &mut Env, args: Vec<String>) {
     }
 }
 
+fn data_cmd(_env: &mut Env, args: Vec<String>) {
+    let arg_str: String = args.join(" ");
+    println!("parsing: {:?}", arg_str);
+
+    let data = parser::parse_data(&arg_str);
+    println!("{:?}", data);
+}
+
 fn main() -> std::io::Result<()> {
     Repl::new(Env::default())
         .with_prompt("auto> ")
         .with_function("?", derive_cmd)
         .with_function("?!", derive_simplify_cmd)
         .with_function("prove", prove_cmd)
+        .with_function("data", data_cmd)
         .run()
 }
