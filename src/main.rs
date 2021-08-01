@@ -55,10 +55,8 @@ fn prove_cmd(_env: &mut Env, args: Vec<String>) {
 
 fn data_cmd(_env: &mut Env, args: Vec<String>) {
     let arg_str: String = args.join(" ");
-    println!("parsing: {:?}", arg_str);
-
     let data = parser::parse_data(&arg_str);
-    println!("{:?}", data);
+    println!("{}", data);
 }
 
 fn main() -> std::io::Result<()> {

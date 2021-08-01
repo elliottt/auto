@@ -54,6 +54,9 @@ pub fn parse_type(input: &str) -> Rc<Type> {
 
             Rule::atom => return Rc::new(Type::atom(pair.as_str())),
 
+            // TODO: bad
+            Rule::var => return Rc::new(Type::atom(pair.as_str())),
+
             Rule::bottom => return Rc::new(Type::Bottom),
 
             _ => {
@@ -81,6 +84,25 @@ pub fn parse_data(input: &str) -> Data {
             Rule::vars => {
                 for var in node.into_inner() {
                     data.vars.push(String::from(var.as_str()))
+                }
+            }
+
+            Rule::constrs => {
+                let res_ty = data.as_type();
+
+                for constr in node.into_inner() {
+                    let mut iter = constr.into_inner();
+
+                    let name = String::from(iter.next().unwrap().as_str());
+                    let mut res = Rc::clone(&res_ty);
+
+                    if let Some(constrs) = iter.next() {
+                        for ty in constrs.into_inner().rev() {
+                            res = Rc::new(Type::imp(parse_type(ty.as_str()), res));
+                        }
+                    }
+
+                    data.constrs.push((name, res));
                 }
             }
 

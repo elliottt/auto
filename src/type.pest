@@ -10,7 +10,7 @@ app = { atom ~ atomic* }
 iexp = { aexp ~ ( "->" ~ iexp )?  }
 aexp = { oexp ~ ( "/\\" ~ aexp )?  }
 oexp = { atomic ~ ( "\\/" ~ oexp )?  }
-atomic = { atom | bottom | ( "(" ~ iexp ~ ")" ) }
+atomic = { atom | var | bottom | ( "(" ~ iexp ~ ")" ) }
 
 type_ = { SOI ~ iexp ~ EOI }
 
@@ -24,4 +24,6 @@ data = {
 
 vars = { var* }
 
-constrs = { app ~ ("|" ~ constrs)? }
+constrs = { constr ~ ("|" ~ constrs)? }
+
+constr = { atom ~ atomic* }
