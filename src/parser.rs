@@ -1,4 +1,4 @@
-use pest::{iterators::Pair, Parser};
+use pest::{iterators::Pair, Parser, error::Error};
 use std::rc::Rc;
 
 use crate::types::{Constr, Data, Type};
@@ -7,9 +7,8 @@ use crate::types::{Constr, Data, Type};
 #[grammar = "type.pest"]
 pub struct TypeParser;
 
-pub fn parse_type(input: &str) -> Rc<Type> {
-    let res = TypeParser::parse(Rule::type_, input)
-        .expect("Failed to parse type")
+pub fn parse_type(input: &str) -> Result<Rc<Type>, Error<Rule>> {
+    let res = TypeParser::parse(Rule::type_, input)?
         .next()
         .unwrap();
 
@@ -72,12 +71,11 @@ pub fn parse_type(input: &str) -> Rc<Type> {
         }
     }
 
-    parse_value(res)
+    Ok(parse_value(res))
 }
 
-pub fn parse_data(input: &str) -> Data {
-    let res = TypeParser::parse(Rule::data, input)
-        .expect("Failed to parse data declaration")
+pub fn parse_data(input: &str) -> Result<Data, Error<Rule>> {
+    let res = TypeParser::parse(Rule::data, input)?
         .next()
         .unwrap();
 
@@ -102,7 +100,7 @@ pub fn parse_data(input: &str) -> Data {
 
                     if let Some(fields) = iter.next() {
                         for ty in fields.into_inner() {
-                            constr.fields.push(parse_type(ty.as_str()))
+                            constr.fields.push(parse_type(ty.as_str())?)
                         }
                     }
 
@@ -114,5 +112,5 @@ pub fn parse_data(input: &str) -> Data {
         }
     }
 
-    data
+    Ok(data)
 }

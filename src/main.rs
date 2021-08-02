@@ -4,6 +4,7 @@ extern crate repl_framework;
 extern crate pest_derive;
 
 use repl_framework::Repl;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 mod parser;
@@ -14,49 +15,77 @@ mod types;
 
 use prove::{prove, Sequent};
 use terms::Term;
+use types::Data;
 
 #[derive(Default)]
-struct Env {}
+struct Env {
+    datas: HashMap<String, Data>,
+}
 
 fn derive_cmd(_env: &mut Env, args: Vec<String>) {
     let ty_str: String = args.join(" ");
-    let ty = parser::parse_type(&ty_str);
+    match parser::parse_type(&ty_str) {
+        Ok(ty) => {
+            if let Some(proof) = prove(Rc::new(Sequent::from_type(ty.clone()))) {
+                let term = Term::from_proof(&proof);
+                println!("{}", term);
+            } else {
+                println!("Unable to prove: {}", ty);
+            }
+        }
 
-    if let Some(proof) = prove(Rc::new(Sequent::from_type(ty.clone()))) {
-        let term = Term::from_proof(&proof);
-        println!("{}", term);
-    } else {
-        println!("Unable to prove: {}", ty);
+        Err(err) => {
+            println!("{}", err);
+        }
     }
 }
 
 fn derive_simplify_cmd(_env: &mut Env, args: Vec<String>) {
     let ty_str: String = args.join(" ");
-    let ty = parser::parse_type(&ty_str);
 
-    if let Some(proof) = prove(Rc::new(Sequent::from_type(ty.clone()))) {
-        let term = Term::from_proof(&proof);
-        println!("{}", Term::simplify(term));
-    } else {
-        println!("Unable to prove: {}", ty);
+    match parser::parse_type(&ty_str) {
+        Ok(ty) => {
+            if let Some(proof) = prove(Rc::new(Sequent::from_type(ty.clone()))) {
+                let term = Term::from_proof(&proof);
+                println!("{}", Term::simplify(term));
+            } else {
+                println!("Unable to prove: {}", ty);
+            }
+        }
+
+        Err(err) => {
+            println!("{}", err);
+        }
     }
 }
 
 fn prove_cmd(_env: &mut Env, args: Vec<String>) {
     let ty_str: String = args.join(" ");
-    let ty = parser::parse_type(&ty_str);
+    match parser::parse_type(&ty_str) {
+        Ok(ty) => {
+            if let Some(proof) = prove(Rc::new(Sequent::from_type(ty.clone()))) {
+                println!("{}", proof);
+            } else {
+                println!("Unable to prove: {}", ty);
+            }
+        }
 
-    if let Some(proof) = prove(Rc::new(Sequent::from_type(ty.clone()))) {
-        println!("{}", proof);
-    } else {
-        println!("Unable to prove: {}", ty);
+        Err(err) => {
+            println!("{}", err);
+        }
     }
 }
 
-fn data_cmd(_env: &mut Env, args: Vec<String>) {
+fn data_cmd(env: &mut Env, args: Vec<String>) {
     let arg_str: String = args.join(" ");
-    let data = parser::parse_data(&arg_str);
-    println!("{}", data);
+    match parser::parse_data(&arg_str) {
+        Ok(data) => {
+            env.datas.insert(data.name.clone(), data);
+        }
+        Err(err) => {
+            println!("{}", err);
+        }
+    }
 }
 
 fn main() -> std::io::Result<()> {
