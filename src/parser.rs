@@ -1,7 +1,7 @@
 use pest::{iterators::Pair, Parser};
 use std::rc::Rc;
 
-use crate::types::{Data, Type};
+use crate::types::{Constr, Data, Type};
 
 #[derive(Parser)]
 #[grammar = "type.pest"]
@@ -94,21 +94,19 @@ pub fn parse_data(input: &str) -> Data {
             }
 
             Rule::constrs => {
-                let res_ty = data.as_type();
+                for node in node.into_inner() {
+                    let mut iter = node.into_inner();
+                    let mut constr = Constr::default();
 
-                for constr in node.into_inner() {
-                    let mut iter = constr.into_inner();
+                    constr.name.push_str(iter.next().unwrap().as_str());
 
-                    let name = String::from(iter.next().unwrap().as_str());
-                    let mut res = Rc::clone(&res_ty);
-
-                    if let Some(constrs) = iter.next() {
-                        for ty in constrs.into_inner().rev() {
-                            res = Type::imp(parse_type(ty.as_str()), res);
+                    if let Some(fields) = iter.next() {
+                        for ty in fields.into_inner() {
+                            constr.fields.push(parse_type(ty.as_str()))
                         }
                     }
 
-                    data.constrs.push((name, res));
+                    data.constrs.push(constr);
                 }
             }
 

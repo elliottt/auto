@@ -23,6 +23,6 @@ data = {
 
 vars = { var* }
 
-constrs = { constr ~ ("|" ~ constrs)? }
+constrs = { constr ~ ("|" ~ constr)* }
 
 constr = { atom ~ atomic* }

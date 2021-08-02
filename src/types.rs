@@ -7,7 +7,7 @@ use crate::pretty::{self, Pretty, RcDoc};
 pub struct Data {
     pub name: String,
     pub vars: Vec<String>,
-    pub constrs: Vec<(String, Rc<Type>)>,
+    pub constrs: Vec<Constr>,
 }
 
 impl Data {
@@ -31,17 +31,16 @@ impl pretty::Pretty for Data {
             ));
 
         if !self.constrs.is_empty() {
-            doc = doc.append(
-                RcDoc::concat(self.constrs.iter().map(|(name, ty)| {
-                    RcDoc::line()
-                        .append(RcDoc::text(name))
-                        .append(RcDoc::space())
-                        .append(RcDoc::text("::"))
-                        .append(RcDoc::space())
-                        .append(ty.pp(0))
-                }))
-                .nest(2),
-            )
+            doc = doc
+                .append(RcDoc::text("="))
+                .append(RcDoc::space())
+                .append(RcDoc::intersperse(
+                    self.constrs.iter().map(|constr| constr.pp(0)),
+                    RcDoc::space()
+                        .append(RcDoc::text("|"))
+                        .append(RcDoc::space()),
+                ))
+                .nest(2)
         }
 
         doc
@@ -49,6 +48,49 @@ impl pretty::Pretty for Data {
 }
 
 impl fmt::Display for Data {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.pp(0).render_fmt(80, f)
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Constr {
+    pub name: String,
+    pub fields: Vec<Rc<Type>>,
+}
+
+impl Constr {
+    /// Generate an imp type for the 
+    pub fn as_type(&self, data: &Data) -> Rc<Type> {
+        let mut res = data.as_type();
+
+        for field in self.fields.iter().rev() {
+            res = Type::imp(Rc::clone(field), res);
+        }
+
+        res
+    }
+
+    /// Generates a constructor application
+    pub fn as_match(&self) -> Rc<Type> {
+        Type::app(
+            Type::atom(&self.name),
+            self.fields.iter().map(Rc::clone),
+        )
+    }
+}
+
+impl pretty::Pretty for Constr {
+    fn pp(&self, _prec: usize) -> RcDoc {
+        RcDoc::intersperse(
+            std::iter::once(RcDoc::text(&self.name))
+                .chain(self.fields.iter().map(|field| field.pp(5))),
+            RcDoc::space(),
+        )
+    }
+}
+
+impl fmt::Display for Constr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.pp(0).render_fmt(80, f)
     }
