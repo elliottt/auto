@@ -88,6 +88,12 @@ fn data_cmd(env: &mut Env, args: Vec<String>) {
     }
 }
 
+fn env_cmd(env: &mut Env, _args: Vec<String>) {
+    for data in env.datas.values() {
+        println!("{}", data);
+    }
+}
+
 fn main() -> std::io::Result<()> {
     Repl::new(Env::default())
         .with_prompt("auto> ")
@@ -95,5 +101,6 @@ fn main() -> std::io::Result<()> {
         .with_function("?!", derive_simplify_cmd)
         .with_function("prove", prove_cmd)
         .with_function("data", data_cmd)
+        .with_function("env", env_cmd)
         .run()
 }

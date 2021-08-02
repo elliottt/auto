@@ -32,6 +32,7 @@ impl pretty::Pretty for Data {
 
         if !self.constrs.is_empty() {
             doc = doc
+                .append(RcDoc::space())
                 .append(RcDoc::text("="))
                 .append(RcDoc::space())
                 .append(RcDoc::intersperse(
