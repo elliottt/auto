@@ -94,9 +94,17 @@ fn env_cmd(env: &mut Env, _args: Vec<String>) {
     }
 }
 
+fn help_cmd(_env: &mut Env, _args: Vec<String>) {
+    println!("help           Print this message");
+    println!("? formula      Construct a term for this formula, if possible");
+    println!("?! formula     Same as `?`, but simplify the result as well");
+    println!("prove formula  Display the proof tree for the formula");
+}
+
 fn main() -> std::io::Result<()> {
     Repl::new(Env::default())
         .with_prompt("auto> ")
+        .with_function("help", help_cmd)
         .with_function("?", derive_cmd)
         .with_function("?!", derive_simplify_cmd)
         .with_function("prove", prove_cmd)

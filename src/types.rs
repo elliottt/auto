@@ -11,6 +11,7 @@ pub struct Data {
 }
 
 impl Data {
+    #[allow(dead_code)]
     pub fn as_type(&self) -> Rc<Type> {
         Type::app(
             Type::atom(&self.name),
@@ -61,7 +62,8 @@ pub struct Constr {
 }
 
 impl Constr {
-    /// Generate an imp type for the 
+    /// Generate an imp type for the constructor.
+    #[allow(dead_code)]
     pub fn as_type(&self, data: &Data) -> Rc<Type> {
         let mut res = data.as_type();
 
@@ -73,6 +75,7 @@ impl Constr {
     }
 
     /// Generates a constructor application
+    #[allow(dead_code)]
     pub fn as_match(&self) -> Rc<Type> {
         Type::app(
             Type::atom(&self.name),
