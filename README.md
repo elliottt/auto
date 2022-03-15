@@ -55,11 +55,12 @@ auto>
 I came across a [stack
 overflow](https://stackoverflow.com/questions/10217931/how-does-djinn-work)
 question a long time back when wondering how the haskell program `djinn` worked.
-Lennart Augustsson gave a helpful answer, and through a jumps that I don't
-remember now, I came across the paper [CONTRACTION-FREE SEQUENT CALCULI FOR
-INTUITIONISTIC LOGIC](https://www.jstor.org/stable/2275431). That paper gives a
-pretty clear outline of the decision procedure that Lennart outlines in his
-reply, so I decided to implement it as `auto`.
+Lennart Augustsson gave a helpful answer, and through a series of jumps that I
+don't remember now, I came across the paper [CONTRACTION-FREE SEQUENT CALCULI
+FOR INTUITIONISTIC LOGIC](https://www.jstor.org/stable/2275431). That paper
+gives a pretty clear outline of the decision procedure that Lennart mentions in
+his reply. After reading the paper I decided to implement `auto` to put it into
+practice and learn some more rust in the process.
 
 ## TODO
 
