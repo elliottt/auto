@@ -31,8 +31,10 @@ impl Env {
         Expr(0)
     }
 
-    pub fn atom(&mut self, name: String) -> Expr {
-        self.push(ExprData::Atom { name })
+    pub fn atom(&mut self, name: impl ToString) -> Expr {
+        self.push(ExprData::Atom {
+            name: name.to_string(),
+        })
     }
 
     pub fn imp(&mut self, left: Expr, right: Expr) -> Expr {
@@ -114,7 +116,7 @@ pub enum Rule {
     ImpR,
     AndL,
     AndR,
-    OrInj,
+    OrInj { case: usize },
     OrL,
     ImpVarL,
     ImpAndL,
@@ -123,16 +125,16 @@ pub enum Rule {
 }
 
 #[derive(Clone, Debug)]
-pub struct Proof {
-    pub rule: Rule,
-    pub assumptions: Vec<Proof>,
-    pub conclusion: Sequent,
-}
-
-#[derive(Clone, Debug)]
 pub struct Subgoal {
     rule: Rule,
     goals: Vec<Sequent>,
+}
+
+fn without_assump(antecedent: &[Expr], ix: usize) -> Vec<Expr> {
+    let mut assumps = Vec::new();
+    assumps.extend(&antecedent[0..ix]);
+    assumps.extend(&antecedent[ix + 1..]);
+    assumps
 }
 
 /// Attempt to apply rules that will never fail to reduce this goal.
@@ -179,13 +181,6 @@ fn try_simple(env: &mut Env, goal: &Sequent) -> Option<Subgoal> {
         }
 
         _ => {}
-    }
-
-    fn without_assump(antecedent: &[Expr], ix: usize) -> Vec<Expr> {
-        let mut assumps = Vec::new();
-        assumps.extend(&antecedent[0..ix]);
-        assumps.extend(&antecedent[ix + 1..]);
-        assumps
     }
 
     for (ix, &assump) in goal.antecedent.iter().enumerate() {
@@ -292,4 +287,176 @@ fn try_simple(env: &mut Env, goal: &Sequent) -> Option<Subgoal> {
     }
 
     None
+}
+
+#[derive(Clone, Debug)]
+pub struct Proof {
+    pub rule: Rule,
+    pub assumptions: Vec<Proof>,
+    pub conclusion: Sequent,
+}
+
+pub fn prove(env: &mut Env, goal: Sequent) -> Option<Proof> {
+    // Try to discharge the goal with rules that don't require backtracking.
+    if let Some(subgoal) = try_simple(env, &goal) {
+        let mut assumptions = Vec::with_capacity(subgoal.goals.len());
+
+        for goal in subgoal.goals {
+            if let Some(proof) = prove(env, goal) {
+                assumptions.push(proof);
+            } else {
+                return None;
+            }
+        }
+
+        return Some(Proof {
+            rule: subgoal.rule,
+            assumptions,
+            conclusion: goal,
+        });
+    }
+
+    // Attempt to discharge a goal introduced by disjunction.
+    if let ExprData::Or { cases } = &env[goal.consequent] {
+        for (ix, case) in cases.clone().into_iter().enumerate() {
+            let case = Sequent::new(goal.antecedent.clone(), case);
+            if let Some(proof) = prove(env, case) {
+                return Some(Proof {
+                    rule: Rule::OrInj { case: ix },
+                    assumptions: vec![proof],
+                    conclusion: goal,
+                });
+            }
+        }
+    }
+
+    // Attempt to discharge the goal by using a disjunction in the environment.
+    for (ix, assump) in goal.antecedent.iter().enumerate() {
+        if let ExprData::Or { cases } = &env[*assump] {
+            let antecedent = without_assump(&goal.antecedent, ix);
+
+            let mut assumptions = Vec::with_capacity(cases.len());
+
+            for case in cases.clone() {
+                let goal = Sequent::new(
+                    antecedent.iter().copied().chain(std::iter::once(case)),
+                    goal.consequent,
+                );
+
+                if let Some(proof) = prove(env, goal) {
+                    assumptions.push(proof);
+                } else {
+                    // If we can't prove all cases of the disjunction, we can't use it to prove the
+                    // goal.
+                    continue;
+                }
+            }
+
+            return Some(Proof {
+                rule: Rule::OrL,
+                assumptions,
+                conclusion: goal,
+            });
+        }
+    }
+
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{prove, Env, Proof, Rule, Sequent};
+
+    #[test]
+    fn test_ex_falso() {
+        let mut env = Env::new();
+        let goal = Sequent::new([env.bottom()], env.atom("A"));
+        assert!(matches!(
+            prove(&mut env, goal),
+            Some(Proof {
+                rule: Rule::ExFalso,
+                assumptions,
+                ..
+            }) if assumptions.is_empty()
+        ));
+    }
+
+    #[test]
+    fn test_axiom() {
+        let mut env = Env::new();
+        let a = env.atom("A");
+        let goal = Sequent::new([a], a);
+        assert!(matches!(
+            prove(&mut env, goal),
+            Some(Proof {
+                rule: Rule::Axiom {..},
+                assumptions,
+                ..
+            }) if assumptions.is_empty()
+        ));
+    }
+
+    #[test]
+    fn test_disjunction_goal() {
+        let mut env = Env::new();
+        let a = env.atom("A");
+        let b = env.atom("B");
+        let goal = Sequent::new([a], env.or([a, b]));
+
+        let assumptions = match prove(&mut env, goal) {
+            Some(Proof {
+                rule: Rule::OrInj { case: 0 },
+                assumptions,
+                ..
+            }) => assumptions,
+
+            _ => panic!("failed to match disjunction"),
+        };
+
+        assert_eq!(assumptions.len(), 1);
+
+        assert!(matches!(
+            &assumptions[0],
+            Proof {
+                rule: Rule::Axiom { .. },
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_disjunction_argument() {
+        let mut env = Env::new();
+        let a = env.atom("A");
+        let goal = Sequent::new([env.or([a, a])], a);
+
+        let assumptions = match prove(&mut env, goal) {
+            Some(Proof {
+                rule: Rule::OrL,
+                assumptions,
+                ..
+            }) => assumptions,
+
+            _ => panic!("failed to match disjunction"),
+        };
+
+        assert_eq!(assumptions.len(), 2);
+
+        assert!(matches!(
+            &assumptions[0],
+            Proof {
+                rule: Rule::Axiom { expr },
+                assumptions,
+                ..
+            } if assumptions.is_empty() && *expr == a
+        ));
+        assert!(matches!(
+            &assumptions[1],
+            Proof {
+                rule: Rule::Axiom { expr },
+                assumptions,
+                ..
+            } if assumptions.is_empty() && *expr == a
+        ));
+    }
 }
